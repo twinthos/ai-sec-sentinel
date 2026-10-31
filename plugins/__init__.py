@@ -1,1 +1,1 @@
-"""Twinthos AI Security Sentinel — Layer 2 plugins."""
+"""Twinthos Sentinel — Layer 2 plugins."""

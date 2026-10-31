@@ -1,7 +1,7 @@
 # Case Study: Langflow MCP Security Audit
 **Date:** 31 Oct 2026  
 **Auditor:** Tyson Mandela, Twinthos  
-**Tool:** Twinthos AI Security Sentinel v1.1.0
+**Tool:** Twinthos Sentinel v1.2.0
 
 ## Context
 Langflow (IBM) has CVE-2026-105740 (CVSS 9.9) — unauthenticated RCE via MCP stdio transport. 1,423+ exploitation attempts from 27 IPs across 15 countries since Sep 2026.

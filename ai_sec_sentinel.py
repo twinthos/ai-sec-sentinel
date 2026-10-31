@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Twinthos AI Security Sentinel — autonomous, continuous, adaptive AI vulnerability monitor.
+Twinthos Sentinel — continuous threat intelligence for organizations.
 
-Features:
-- Continuous daemon mode or one-shot scan
-- CISA KEV + FIRST EPSS enrichment
-- Lockfile-aware dependency checking
-- Telegram/Discord/webhook alerts
-- Feedback learning (ignored/useful)
-- Auto-remediation hooks
-- Config-driven, no hardcoded secrets
+Monitors:
+- AI/agent/MCP vulnerabilities (current focus)
+- Supply-chain compromises
+- Brand/reputation threats
+- Infrastructure threats relevant to your stack
+
+Scrapes CVE feeds, CISA KEV, EPSS, and news sources.
+Filters to YOUR stack. Alerts in real-time. Learns from feedback.
 
 Usage:
   python3 ai_sec_sentinel.py                        # one-shot scan
@@ -417,8 +417,8 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Twinthos AI Security Sentinel")
-    parser.add_argument("--version", action="version", version="Twinthos AI Security Sentinel v1.1.0")
+    parser = argparse.ArgumentParser(description="Twinthos Sentinel — continuous threat intelligence")
+    parser.add_argument("--version", action="version", version="Twinthos Sentinel v1.2.0")
     parser.add_argument("--lockfile", help="Path to lockfile")
     parser.add_argument("--ecosystem", choices=["python", "npm", "rust", "go", "ruby", "php", "dotnet"])
     parser.add_argument("--check-only", action="store_true", help="Lockfile only, no feed watch")

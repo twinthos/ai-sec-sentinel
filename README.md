@@ -1,8 +1,8 @@
-# Twinthos AI Security Sentinel
+# Twinthos Sentinel
 
-**Autonomous. Continuous. Adaptive.**
+**Continuous threat intelligence for organizations.**
 
-A self-driving AI vulnerability monitor that doesn't just alert — it learns, adapts, and can auto-remediate. No API key. No login. No cloud dependency.
+A self-driving monitor that scrapes, filters, and alerts on threats that could actually harm your company — AI threats today, brand threats tomorrow. No API keys. No login. No cloud dependency. Runs wherever your infrastructure runs.
 
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -22,21 +22,23 @@ $ python3 ai_sec_sentinel.py --daemon --interval 60
 
 ## The problem
 
-- Generic CVE feeds are 90% noise for AI teams. You get alerts about WordPress plugins while LangChain gets compromised.
-- CISA KEV tells you what's actively exploited — but not what matters to YOUR stack.
-- Existing tools are cloud SaaS, pentesting suites, or static scanners. None run locally, continuously, and learn from your feedback.
-- By the time you hear about an agent/MCP vulnerability on Twitter, it's already in the wild.
+- Generic threat feeds are 90% noise for any organization. You get alerts about WordPress plugins while your AI stack, supply chain, or brand reputation is under attack.
+- CISA KEV tells you what's actively exploited — but not what matters to YOUR stack, YOUR suppliers, or YOUR market.
+- Existing tools are cloud SaaS, pentesting suites, or static scanners. None run continuously, learn from your feedback, and adapt to new threat vectors.
+- By the time you hear about an AI agent escape, a supply-chain compromise, or a brand-threatening leak on Twitter, it's already in the wild.
 
 ## What this does
 
-- **AI-only filter** — only alerts on LangChain, MCP, Claude Code, OpenAI, Anthropic, agent frameworks, prompt injection, RAG, embeddings, vLLM, Ollama, LiteLLM, HuggingFace, AutoGen, CrewAI, Semantic Kernel, LangGraph, and 20+ other AI keywords
+- **Threat-intelligence scraper** — continuously pulls CVE feeds, CISA KEV, exploit databases, and news sources
+- **Organization-aware filter** — only alerts on threats that match YOUR stack, YOUR suppliers, and YOUR industry
+- **AI-first, not AI-only** — AI/agent/MCP threats are the current focus because that's where the active exploitation is, but the monitor is built to track any threat vector
 - **CISA KEV + FIRST EPSS** — cross-references every alert against known exploited vulnerabilities and exploit prediction scores
-- **Lockfile-aware** — scans your actual `requirements.txt` / `package-lock.json` / `go.sum` against cve.now's catalog
+- **Lockfile-aware** — scans your actual `requirements.txt` / `package-lock.json` / `go.sum` against threat feeds
 - **Continuous daemon** — runs 24/7, scans every N minutes, self-heals on errors
-- **Feedback learning** — mark alerts as `ignored` or `useful`; the sentinel adapts
+- **Feedback learning** — mark alerts as `ignored` or `useful`; the monitor adapts
 - **Auto-remediation hooks** — extension points for patch branches, PR automation, quarantine
 - **Telegram/Discord/webhook** — formatted alerts with CVSS, EPSS, CISA KEV flag, fix version
-- **Deduplication** — remembers alerted CVEs across runs; never spam you twice
+- **Deduplication** — remembers alerted threats across runs; never spam you twice
 
 ## 30-second install
 
@@ -72,13 +74,13 @@ python3 ai_sec_sentinel.py --feedback CVE-2026-119712 ignored
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌──────────────┐
-│ cve.now feed│────▶│ AI keyword   │────▶│ CISA KEV +  │
-│ (merged:    │     │ filter       │     │ EPSS enrich  │
-│ NVD, GitHub,│     │ LangChain,   │     │ CVSS, EPSS,  │
-│ OSV, NVD,   │     │ MCP, Claude, │     │ KEV flag     │
-│ Exploit-DB) │     │ GPT, etc.)   │     └──────┬───────┘
-└─────────────┘     └──────────────┘            │
-                                                ▼
+│ Threat feeds│────▶│ Stack-aware  │────▶│ CISA KEV +  │
+│ (CVE, KEV,  │     │ filter       │     │ EPSS enrich  │
+│ EPSS, news) │     │ AI, infra,   │     │ CVSS, EPSS,  │
+│             │     │ suppliers,   │     │ KEV flag     │
+└─────────────┘     │ brand risks  │     └──────┬───────┘
+                    └──────────────┘            │
+                                                 ▼
 ┌─────────────┐     ┌──────────────┐     ┌──────────────┐
 │ Lockfile    │────▶│ Dedup +      │────▶│ Telegram /   │
 │ scanner     │     │ feedback     │     │ Discord /    │

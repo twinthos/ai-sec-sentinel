@@ -1,4 +1,4 @@
-# Contributing to Twinthos AI Security Sentinel
+# Contributing to Twinthos Sentinel
 
 ## Ground rules
 
