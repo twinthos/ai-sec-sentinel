@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  sentinel:
+    build: .
+    image: twinthos/ai-sec-sentinel:latest
+    container_name: ai-sec-sentinel
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+    command: ["--daemon", "--interval", "60"]
+    healthcheck:
+      test: ["CMD", "python3", "/app/ai_sec_sentinel.py", "--check-only"]
+      interval: 1h
+      timeout: 30s
+      retries: 3

@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+sentinel_state.json
+sentinel_feedback.json
+*.log
+.git/
+.gitignore
+.dockerignore
+docker-compose.yml
+Dockerfile
+.github/
+CONTRIBUTING.md
+LICENSE
+README.md

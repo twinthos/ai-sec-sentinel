@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Syntax check
+        run: python -m py_compile ai_sec_sentinel.py
+
+      - name: Unit tests
+        run: |
+          python ai_sec_sentinel.py --since-hours 1 --feed-limit 5
+          python ai_sec_sentinel.py --lockfile requirements.txt --ecosystem python --check-only
+
+      - name: Docker build
+        run: docker build -t twinthos/ai-sec-sentinel:test .
