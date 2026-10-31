@@ -48,6 +48,18 @@
     "adversarial",
     "jailbreak"
   ],
+  "suppliers": [],
+  "news": {
+    "enabled": false,
+    "keywords": [],
+    "sources": [
+      "https://feeds.bbci.co.uk/news/technology/rss.xml",
+      "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml",
+      "https://www.theverge.com/rss/index.xml",
+      "https://techcrunch.com/feed/",
+      "https://www.wired.com/feed/rss"
+    ]
+  },
   "telegram": {
     "enabled": false,
     "parse_mode": "HTML"

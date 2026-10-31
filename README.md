@@ -138,10 +138,23 @@ Set `auto_remediate: true` in config. The sentinel exposes hooks for:
 | Vigil LLM | Prompt injection | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | AiSOC | SIEM | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ |
 
-**What others miss:** generic CVEs drown out AI signals; no one combines CISA KEV + EPSS + lockfile + feedback learning in a local daemon.
+**What others miss:** generic CVEs drown out AI signals; no one combines CISA KEV + EPSS + lockfile + feedback learning + news/supplier monitoring in a continuous daemon.
+
+## What's new in v1.2.0
+
+- **News scanner** — RSS/news monitoring for brand, supplier, and industry threats
+- **Supplier watch** — get alerted when YOUR suppliers are breached
+- **Telegram inline buttons** — 👍 Useful / 👎 Ignore directly from alerts
+- **Offline lockfile fallback** — works even when cve.now API is down
+- **Repositioned** — from "AI Security Sentinel" to "Twinthos Sentinel": continuous threat intelligence for organizations
 
 ## Roadmap
 
+- [ ] Cloud provider polling (AWS Bedrock, Azure OpenAI, Vertex AI)
+- [ ] Kubernetes pod scanner
+- [ ] SaaS AI tracker (Slack/Teams shadow AI)
+- [ ] Agent egress monitoring
+- [ ] Behavioural baseline for misalignment detection
 - [ ] Web UI (Streamlit)
 - [ ] MCP server mode — query sentinel state from Claude Code
 - [ ] Docker image on Docker Hub

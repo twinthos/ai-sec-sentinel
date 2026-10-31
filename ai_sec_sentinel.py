@@ -264,7 +264,7 @@ def format_alert(entry: dict, epss_score: float | None = None, in_kev: bool = Fa
     return msg
 
 
-def send_telegram(message: str, token: str, chat_id: str) -> bool:
+def send_telegram(message: str, token: str, chat_id: str, cve_id: str = "") -> bool:
     if not token or not chat_id:
         print("[TELEGRAM NOT CONFIGURED]")
         print(message[:800])
@@ -277,6 +277,15 @@ def send_telegram(message: str, token: str, chat_id: str) -> bool:
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
         }
+        if cve_id:
+            payload["reply_markup"] = {
+                "inline_keyboard": [
+                    [
+                        {"text": "👍 Useful", "callback_data": f"feedback:{cve_id}:useful"},
+                        {"text": "👎 Ignore", "callback_data": f"feedback:{cve_id}:ignored"},
+                    ]
+                ]
+            }
         r = requests.post(url, json=payload, timeout=15)
         ok = r.status_code == 200 and r.json().get("ok")
         print(f"Telegram: {'sent' if ok else 'failed'} ({r.status_code})")
@@ -309,8 +318,45 @@ def check_lockfile(lockfile_path: str, ecosystem: str) -> list[dict]:
             ]
             return ai_vulns
     except Exception as e:
-        print(f"Lockfile check error: {e}")
-    return []
+        print(f"Lockfile API error: {e}")
+
+    # Offline fallback: basic local pattern matching
+    return _offline_lockfile_check(path, content, ecosystem)
+
+
+def _offline_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
+    """Offline fallback when cve.now API is unavailable."""
+    vulns = []
+    lines = content.splitlines()
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        pkg = None
+        version = None
+        if ecosystem == "python":
+            if "==" in line:
+                pkg, version = line.split("==", 1)
+            elif ">=" in line:
+                pkg = line.split(">=", 1)[0]
+        elif ecosystem == "npm":
+            if ":" in line and "@" in line:
+                pkg = line.split(":")[1].split("@")[0]
+                version = line.split("@")[-1]
+        elif ecosystem == "go":
+            if " " in line:
+                parts = line.split()
+                if len(parts) >= 2:
+                    pkg, version = parts[0], parts[1]
+        if not pkg:
+            continue
+        if any(kw in pkg.lower() for kw in ["langchain", "openai", "anthropic", "claude", "gpt", "mcp", "agent", "crewai", "langgraph", "llamaindex", "huggingface", "transformers", "ollama", "vllm", "litellm", "semantic"]):
+            vulns.append({
+                "id": pkg,
+                "summary": f"Offline check: {pkg} is an AI-related dependency. Verify latest version manually.",
+                "severity": {"cvss": None},
+            })
+    return vulns
 
 
 def run_scan(config: dict, token: str = "", chat: str = "") -> int:
@@ -352,6 +398,24 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
     new_entries = filter_new(entries, since)
     ai_entries = [e for e in new_entries if is_ai_related(e)]
 
+    # Supplier watch
+    suppliers = [s.strip() for s in config.get("suppliers", []) if s.strip()]
+    supplier_entries = []
+    if suppliers:
+        for entry in new_entries:
+            blob = (entry.get("title", "") + " " + entry.get("content_text", "")).lower()
+            if any(supplier.lower() in blob for supplier in suppliers):
+                supplier_entries.append(entry)
+
+    # News watch
+    news_alerts = []
+    if config.get("news", {}).get("enabled"):
+        try:
+            from news_scanner import scan_news
+            news_alerts = scan_news()
+        except Exception as e:
+            print(f"News scan error: {e}")
+
     # Collect CVE IDs for EPSS batch lookup
     cve_ids = []
     for e in ai_entries:
@@ -385,7 +449,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         epss = epss_scores.get(raw_id)
         in_kev = raw_id in kev_ids
         msg = format_alert(entry, epss_score=epss, in_kev=in_kev, cvss=cvss)
-        send_telegram(msg, token, chat)
+        send_telegram(msg, token, chat, cve_id=raw_id)
         seen.add(raw_id)
         alerts_sent += 1
         if alerts_sent >= 5:
@@ -395,11 +459,36 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         "feed_fetched": len(entries),
         "new_entries": len(new_entries),
         "ai_related": len(ai_entries),
+        "supplier_related": len(supplier_entries),
+        "news_alerts": len(news_alerts),
         "alerts_sent": alerts_sent,
         "cisa_kev_hits": sum(1 for e in ai_entries if e.get("id", "").split("#")[0].strip() in kev_ids),
         "high_epss": sum(1 for cid, score in epss_scores.items() if score >= 0.7),
         "lockfile_vulns": 0,
     }
+
+    # Send supplier alerts
+    for entry in supplier_entries:
+        raw_id = entry.get("id", "").split("#")[0].strip()
+        if raw_id in seen:
+            continue
+        msg = f"🏢 <b>Supplier Threat Alert</b>\n\n"
+        msg += f"<b>{entry.get('title', 'Unknown')}</b>\n"
+        msg += f"{entry.get('summary', entry.get('content_text', ''))[:200]}\n\n"
+        msg += f"🔗 <a href='https://cve.now/{raw_id}'>{raw_id}</a>"
+        send_telegram(msg, token, chat)
+        seen.add(raw_id)
+        alerts_sent += 1
+
+    # Send news alerts
+    for alert in news_alerts:
+        msg = f"📰 <b>News Threat Alert — {alert['severity']}</b>\n\n"
+        msg += f"<b>{alert['title']}</b>\n"
+        msg += f"{alert['summary']}\n\n"
+        msg += f"🔗 <a href='{alert['link']}'>{alert['link']}</a>"
+        send_telegram(msg, token, chat)
+        alerts_sent += 1
+
     if lockfile:
         stats["lockfile_vulns"] = len(vulns) if 'vulns' in dir() else 0
 
@@ -430,6 +519,7 @@ def main():
     parser.add_argument("--feedback", nargs="+", help="Mark CVE as ignored or useful, e.g. --feedback CVE-2026-119712 ignored")
     parser.add_argument("--telegram-token", default=os.getenv("TELEGRAM_BOT_TOKEN", ""))
     parser.add_argument("--telegram-chat", default=os.getenv("TELEGRAM_CHAT_ID", ""))
+    parser.add_argument("--webhook-port", type=int, default=0, help="Start webhook server for Telegram callback buttons")
     args = parser.parse_args()
 
     # Load config
@@ -486,6 +576,11 @@ def main():
     token = args.telegram_token or config.get("telegram", {}).get("token", "")
     chat = args.telegram_chat or config.get("telegram", {}).get("chat_id", "")
 
+    if args.webhook_port:
+        print(f"Starting webhook server on port {args.webhook_port}...")
+        _webhook_server(token, args.webhook_port)
+        return
+
     if args.daemon:
         print(f"Starting daemon mode — scanning every {args.interval} minutes...")
         while True:
@@ -496,6 +591,46 @@ def main():
             time.sleep(args.interval * 60)
     else:
         run_scan(config, token, chat)
+
+
+def _handle_callback_query(update: dict, token: str):
+    """Handle Telegram callback query from inline keyboard buttons."""
+    callback = update.get("callback_query", {})
+    data = callback.get("data", "")
+    if not data.startswith("feedback:"):
+        return
+    _, cve_id, action = data.split(":", 2)
+    record_feedback(cve_id, action)
+    chat_id = callback.get("message", {}).get("chat", {}).get("id")
+    if chat_id:
+        send_telegram(f"✅ Feedback recorded: <b>{cve_id}</b> → {action}", token, str(chat_id))
+
+
+def _webhook_server(token: str, port: int = 8080):
+    """Simple HTTP server to receive Telegram webhook updates."""
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length)
+                update = json.loads(body)
+                _handle_callback_query(update, token)
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"OK")
+            except Exception as e:
+                print(f"Webhook error: {e}")
+                self.send_response(500)
+                self.end_headers()
+
+    server = HTTPServer(("0.0.0.0", port), Handler)
+    print(f"Webhook server listening on :{port}")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        server.server_close()
 
 
 if __name__ == "__main__":
