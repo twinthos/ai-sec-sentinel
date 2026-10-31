@@ -52,6 +52,16 @@ AI_KEYWORDS = [
     "ai security", "adversarial", "jailbreak",
 ]
 
+# Infrastructure that commonly supports AI workloads.
+# A CVE here is only flagged if an AI keyword is ALSO present,
+# so we avoid pure infrastructure noise while catching the
+# cases that actually matter to an AI practice.
+AI_INFRA_KEYWORDS = [
+    "clickhouse", "postgres", "mysql", "qdrant", "pinecone", "weaviate",
+    "redis", "elasticsearch", "opensearch", "vector database",
+    "mlflow", "kubeflow", "ray", "jupyter", "vllm",
+]
+
 
 def load_config() -> dict:
     if CONFIG_FILE.exists():
@@ -99,7 +109,16 @@ def is_ai_related(entry: dict) -> bool:
         + " "
         + entry.get("summary", "")
     ).lower()
-    return any(kw in blob for kw in AI_KEYWORDS)
+    # Tier 1: direct AI/agent/MCP keyword hit
+    if any(kw in blob for kw in AI_KEYWORDS):
+        return True
+    # Tier 2: AI infrastructure keyword hit, but only if an AI keyword
+    # is also present in the same entry. This catches cases like
+    # "ClickHouse RCE in AI analytics pipeline" without flagging
+    # every generic database CVE.
+    if any(kw in blob for kw in AI_INFRA_KEYWORDS):
+        return any(kw in blob for kw in AI_KEYWORDS)
+    return False
 
 
 def severity_rank(entry: dict) -> int:
