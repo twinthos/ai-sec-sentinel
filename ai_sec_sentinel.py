@@ -87,6 +87,7 @@ def save_state(state: dict):
 
 
 def load_feedback() -> dict:
+    FEEDBACK_FILE.parent.mkdir(parents=True, exist_ok=True)
     if FEEDBACK_FILE.exists():
         try:
             return json.loads(FEEDBACK_FILE.read_text(encoding="utf-8"))
@@ -390,7 +391,19 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         if alerts_sent >= 5:
             break
 
-    print(f"  {len(entries)} fetched, {len(new_entries)} new, {len(ai_entries)} AI-related, {alerts_sent} alerts sent")
+    stats = {
+        "feed_fetched": len(entries),
+        "new_entries": len(new_entries),
+        "ai_related": len(ai_entries),
+        "alerts_sent": alerts_sent,
+        "cisa_kev_hits": sum(1 for e in ai_entries if e.get("id", "").split("#")[0].strip() in kev_ids),
+        "high_epss": sum(1 for cid, score in epss_scores.items() if score >= 0.7),
+        "lockfile_vulns": 0,
+    }
+    if lockfile:
+        stats["lockfile_vulns"] = len(vulns) if 'vulns' in dir() else 0
+
+    print(f"  {stats["feed_fetched"]} fetched, {stats["new_entries"]} new, {stats["ai_related"]} AI-related, {alerts_sent} alerts sent, {stats["cisa_kev_hits"]} CISA KEV, {stats["high_epss"]} high-EPSS")
 
     # Adaptive: if user consistently ignores certain keywords, lower their weight
     if config.get("learn_from_actions"):
@@ -405,6 +418,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
 
 def main():
     parser = argparse.ArgumentParser(description="Twinthos AI Security Sentinel")
+    parser.add_argument("--version", action="version", version="Twinthos AI Security Sentinel v1.1.0")
     parser.add_argument("--lockfile", help="Path to lockfile")
     parser.add_argument("--ecosystem", choices=["python", "npm", "rust", "go", "ruby", "php", "dotnet"])
     parser.add_argument("--check-only", action="store_true", help="Lockfile only, no feed watch")
@@ -412,6 +426,7 @@ def main():
     parser.add_argument("--since-hours", type=int, default=24)
     parser.add_argument("--daemon", action="store_true", help="Continuous daemon mode")
     parser.add_argument("--interval", type=int, default=60, help="Scan interval in minutes (daemon mode)")
+    parser.add_argument("--stats", action="store_true", help="Show scan statistics and exit")
     parser.add_argument("--feedback", nargs="+", help="Mark CVE as ignored or useful, e.g. --feedback CVE-2026-119712 ignored")
     parser.add_argument("--telegram-token", default=os.getenv("TELEGRAM_BOT_TOKEN", ""))
     parser.add_argument("--telegram-chat", default=os.getenv("TELEGRAM_CHAT_ID", ""))
@@ -427,6 +442,38 @@ def main():
         config["lockfile"] = args.lockfile
     if args.ecosystem:
         config["ecosystem"] = args.ecosystem
+
+    # Stats mode
+    if args.stats:
+        config = load_config()
+        state = load_state()
+        feedback = load_feedback()
+        cisa_kev = fetch_cisa_kev()
+        kev_ids = {v.get("cveID") for v in cisa_kev.get("vulnerabilities", []) if v.get("cveID")}
+        entries = fetch_feed(limit=config.get("feed_limit", 100))
+        since = datetime.now(timezone.utc) - timedelta(hours=config.get("since_hours", 24))
+        new_entries = filter_new(entries, since)
+        ai_entries = [e for e in new_entries if is_ai_related(e)]
+        cve_ids = [e.get("id", "").split("#")[0].strip() for e in ai_entries if e.get("id")]
+        epss_scores = fetch_epss_scores(cve_ids)
+        high_epss = sum(1 for s in epss_scores.values() if s >= 0.7)
+        kev_hits = sum(1 for e in ai_entries if e.get("id", "").split("#")[0].strip() in kev_ids)
+        lockfile_vulns = 0
+        if config.get("lockfile"):
+            vulns = check_lockfile(config["lockfile"], config.get("ecosystem", "python"))
+            lockfile_vulns = len(vulns)
+        ignored = [cid for cid, data in feedback.items() if data.get("action") == "ignored"]
+        print(f"=== Sentinel Stats ===")
+        print(f"Feed fetched: {len(entries)}")
+        print(f"New entries: {len(new_entries)}")
+        print(f"AI-related: {len(ai_entries)}")
+        print(f"CISA KEV hits: {kev_hits}")
+        print(f"High EPSS (>=0.7): {high_epss}")
+        print(f"Lockfile vulns: {lockfile_vulns}")
+        print(f"Ignored CVEs: {len(ignored)}")
+        print(f"Seen CVEs (state): {len(state.get('seen', []))}")
+        print(f"Last run: {state.get('last_run', 'never')}")
+        return
 
     # Feedback mode
     if args.feedback is not None:

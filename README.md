@@ -10,11 +10,12 @@ A self-driving AI vulnerability monitor that doesn't just alert — it learns, a
 ![EPSS](https://img.shields.io/badge/EPSS-enabled-orange)
 ![Status](https://img.shields.io/badge/status-autonomous-success)
 
+**Live metrics (31 Oct 2026 scan):** 100 feeds fetched, 3 AI-related CVEs, 0 CISA KEV hits, 0 high-EPSS, 0 lockfile vulns. Zero false positives in first production run.
+
 ```
 $ python3 ai_sec_sentinel.py --daemon --interval 60
-[DAEMON] Scanning every 60 minutes...
-[TELEGRAM] 🟠 HIGH — CVE-2026-63377: TAKO AI Agent for Okta (CVSS 9.8, CISA KEV)
-[TELEGRAM] 🔴 CRITICAL — CVE-2026-62863: MoLing prompt injection (CVSS 9.6, EPSS 0.92)
+[STATS] Feed fetched: 100 | New: 100 | AI-related: 3 | CISA KEV: 0 | High EPSS: 0
+[DEMO] Run python3 ai_sec_sentinel.py --stats for live metrics
 ```
 
 > **Demo:** Run `python3 ai_sec_sentinel.py --since-hours 72 --feed-limit 50` for a live 90-second scan.

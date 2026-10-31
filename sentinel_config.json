@@ -11,14 +11,42 @@
     "epss": true
   },
   "keywords": [
-    "langchain", "llamaindex", "openai", "anthropic", "claude", "gpt",
-    "mcp", "model context protocol", "agent", "agents", "copilot",
-    "cursor", "codex", "claude code", "aider", "continue",
-    "prompt injection", "rag", "retrieval augmented", "embedding",
-    "vllm", "ollama", "litellm", "transformers", "huggingface",
-    "autogen", "crewai", "semantic kernel", "langgraph",
-    "ai agent", "coding agent", "llm framework", "llm sdk",
-    "ai security", "adversarial", "jailbreak"
+    "langchain",
+    "llamaindex",
+    "openai",
+    "anthropic",
+    "claude",
+    "gpt",
+    "mcp",
+    "model context protocol",
+    "agent",
+    "agents",
+    "copilot",
+    "cursor",
+    "codex",
+    "claude code",
+    "aider",
+    "continue",
+    "prompt injection",
+    "rag",
+    "retrieval augmented",
+    "embedding",
+    "vllm",
+    "ollama",
+    "litellm",
+    "transformers",
+    "huggingface",
+    "autogen",
+    "crewai",
+    "semantic kernel",
+    "langgraph",
+    "ai agent",
+    "coding agent",
+    "llm framework",
+    "llm sdk",
+    "ai security",
+    "adversarial",
+    "jailbreak"
   ],
   "telegram": {
     "enabled": false,
@@ -27,5 +55,9 @@
   "deduplication": {
     "enabled": true,
     "max_remembered": 500
-  }
+  },
+  "stats": {
+    "enabled": true
+  },
+  "version": "1.1.0"
 }
