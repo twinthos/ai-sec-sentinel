@@ -46,7 +46,114 @@
     "llm sdk",
     "ai security",
     "adversarial",
-    "jailbreak"
+    "jailbreak",
+    "IntCyberDigest",
+    "cvedotnow",
+    "CloakdDev",
+    "theinjection",
+    "WizSecurity",
+    "CrowdStrike",
+    "VulnCheck",
+    "LassoSecurity",
+    "EmbracetheRed",
+    "CheckPointResearch",
+    "NCSC",
+    "ICOnews",
+    "GossiTheGod",
+    "BleepingComputer",
+    "KrebsOnSecurity"
+  ],
+  "monitored_accounts": [
+    {
+      "handle": "@IntCyberDigest",
+      "platform": "x",
+      "topics": ["ai-security", "breaches", "nvidia", "openai", "anthropic"],
+      "rss": []
+    },
+    {
+      "handle": "@cvedotnow",
+      "platform": "x",
+      "topics": ["cve", "exploits", "ai-framework-vulns"],
+      "rss": []
+    },
+    {
+      "handle": "@CloakdDev",
+      "platform": "x",
+      "topics": ["audit-quality", "ai-security-audit"],
+      "rss": []
+    },
+    {
+      "handle": "@theinjection_dev",
+      "platform": "web",
+      "topics": ["ai-security-weekly", "cve-tracker"],
+      "rss": ["https://theinjection.dev/week/feed/"]
+    },
+    {
+      "handle": "@WizSecurity",
+      "platform": "x",
+      "topics": ["cloud-security", "ai-platform-breaches", "supply-chain"],
+      "rss": []
+    },
+    {
+      "handle": "@CrowdStrike",
+      "platform": "x",
+      "topics": ["threat-intelligence", "state-sponsored", "ai-agents"],
+      "rss": []
+    },
+    {
+      "handle": "@VulnCheck",
+      "platform": "x",
+      "topics": ["vulnerability-research", "cve", "exploitation"],
+      "rss": []
+    },
+    {
+      "handle": "@LassoSecurity",
+      "platform": "x",
+      "topics": ["agent-security", "mcp", "prompt-injection"],
+      "rss": []
+    },
+    {
+      "handle": "@EmbracetheRed",
+      "platform": "x",
+      "topics": ["ai-agent-exploits", "cursor", "copilot", "vscode"],
+      "rss": []
+    },
+    {
+      "handle": "@CheckPointResearch",
+      "platform": "x",
+      "topics": ["black-hat", "agent-frameworks", "langchain", "crewai"],
+      "rss": []
+    },
+    {
+      "handle": "@NCSC",
+      "platform": "x",
+      "topics": ["uk-government", "ai-guidance", "agentic-ai"],
+      "rss": ["https://www.ncsc.gov.uk/blog/rss"]
+    },
+    {
+      "handle": "@ICOnews",
+      "platform": "x",
+      "topics": ["uk-gdpr", "ai-fines", "enforcement"],
+      "rss": []
+    },
+    {
+      "handle": "@GossiTheGod",
+      "platform": "x",
+      "topics": ["enterprise-breaches", "incident-response"],
+      "rss": []
+    },
+    {
+      "handle": "@BleepingComputer",
+      "platform": "x",
+      "topics": ["security-news", "breaches", "vulnerabilities"],
+      "rss": ["https://www.bleepingcomputer.com/feed/"]
+    },
+    {
+      "handle": "@KrebsOnSecurity",
+      "platform": "x",
+      "topics": ["investigative-security", "breaches", "threat-actors"],
+      "rss": ["https://krebsonsecurity.com/feed/"]
+    }
   ],
   "suppliers": [],
   "news": {
@@ -72,14 +179,33 @@
       "paperspace",
       "coreweave",
       "GPU cloud",
-      "AI infrastructure"
+      "AI infrastructure",
+      "IntCyberDigest",
+      "cvedotnow",
+      "CloakdDev",
+      "theinjection",
+      "WizSecurity",
+      "CrowdStrike",
+      "VulnCheck",
+      "LassoSecurity",
+      "EmbracetheRed",
+      "CheckPointResearch",
+      "NCSC",
+      "ICOnews",
+      "GossiTheGod",
+      "BleepingComputer",
+      "KrebsOnSecurity"
     ],
     "sources": [
       "https://feeds.bbci.co.uk/news/technology/rss.xml",
       "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml",
       "https://www.theverge.com/rss/index.xml",
       "https://techcrunch.com/feed/",
-      "https://www.wired.com/feed/rss"
+      "https://www.wired.com/feed/rss",
+      "https://theinjection.dev/week/feed/",
+      "https://www.ncsc.gov.uk/blog/rss",
+      "https://www.bleepingcomputer.com/feed/",
+      "https://krebsonsecurity.com/feed/"
     ]
   },
   "telegram": {
