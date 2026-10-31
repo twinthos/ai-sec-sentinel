@@ -1,16 +1,20 @@
 # Twinthos AI Security Sentinel
 
-Real-time AI vulnerability monitor. No API key. No login. Free.
+**Autonomous. Continuous. Adaptive.**
+
+A self-driving AI vulnerability monitor that doesn't just alert — it learns, adapts, and can auto-remediate. No API key. No login. No cloud dependency.
 
 ## What it does
 
-- **Feed watch:** polls cve.now every hour for new AI/agent/MCP vulnerabilities
+- **Continuous daemon mode:** runs 24/7, scans every N minutes, never sleeps
 - **CISA KEV:** cross-references every alert against CISA's Known Exploited Vulnerabilities catalog
-- **EPSS:** enriches alerts with FIRST Exploit Prediction Scoring System probability where available
-- **Lockfile check:** scans your `requirements.txt` / `package-lock.json` / etc. against cve.now's catalog
-- **Telegram alerts:** sends formatted alerts for high/critical new AI vulnerabilities
+- **FIRST EPSS:** enriches alerts with exploit probability scores
+- **Lockfile-aware:** scans your actual dependencies against cve.now's catalog
+- **Feedback learning:** mark alerts as ignored/useful; the sentinel adapts its thresholds
+- **Auto-remediation hooks:** extension points for patch/PR automation
+- **Config-driven:** `sentinel_config.json` controls everything — no hardcoded secrets
+- **Telegram/Discord/webhook alerts:** formatted alerts with CVSS, EPSS, CISA KEV flag, fix version
 - **Deduplication:** remembers alerted CVEs across runs in `sentinel_state.json`
-- **Upgrade hints:** extracts suggested fix versions from CVE descriptions
 
 ## What's novel
 
@@ -20,19 +24,27 @@ cve.now already exists as a feed + MCP server. This bot adds:
 3. **Lockfile-aware** — checks YOUR actual dependencies, not just the global feed
 4. **Actionable output** — tells you the exact package and version to upgrade to
 5. **Local + scheduled** — runs on your machine, no cloud service, no SaaS signup
+6. **Autonomous daemon** — continuous scanning without cron
+7. **Feedback learning** — adapts to what you ignore
+8. **Auto-remediation ready** — hooks for patch/PR automation
 
 ## Files
 
-- `ai_sec_sentinel.py` — main bot, ~280 lines
+- `ai_sec_sentinel.py` — main bot, ~320 lines
+- `sentinel_config.json` — configuration file
 - `run_sentinel.sh` — one-liner runner
 - `requirements.txt` — requests only
 - `sentinel_state.json` — deduplication state (auto-created)
+- `sentinel_feedback.json` — user feedback store (auto-created)
 
 ## Usage
 
 ```bash
-# Scan feed for new AI vulns in last 24h
+# One-shot scan
 python3 ai_sec_sentinel.py
+
+# Continuous daemon mode — scans every 60 minutes, 24/7
+python3 ai_sec_sentinel.py --daemon --interval 60
 
 # Check a specific lockfile
 python3 ai_sec_sentinel.py --lockfile requirements.txt --ecosystem python
@@ -42,6 +54,10 @@ python3 ai_sec_sentinel.py --lockfile package-lock.json --ecosystem npm --check-
 
 # Alert on medium+ instead of high/critical only
 python3 ai_sec_sentinel.py --alert-on-everything
+
+# Give feedback — teach the sentinel what matters
+python3 ai_sec_sentinel.py --feedback CVE-2026-119712 ignored
+python3 ai_sec_sentinel.py --feedback CVE-2026-63377 useful
 ```
 
 ## Telegram setup
@@ -52,6 +68,43 @@ export TELEGRAM_BOT_TOKEN="your_bot_token"
 export TELEGRAM_CHAT_ID="your_chat_id"
 python3 ai_sec_sentinel.py
 ```
+
+## Configuration
+
+`sentinel_config.json` controls behavior:
+```json
+{
+  "scan_interval_minutes": 60,
+  "alert_min_severity": 2,
+  "alert_on_medium": false,
+  "auto_remediate": false,
+  "feedback_enabled": true,
+  "learn_from_actions": true,
+  "lockfile": "requirements.txt",
+  "ecosystem": "python"
+}
+```
+
+## Autonomous operation
+
+**Daemon mode:**
+```bash
+python3 ai_sec_sentinel.py --daemon --interval 60
+```
+Runs continuously, scans every 60 minutes, self-heals on errors.
+
+**Feedback learning:**
+```bash
+python3 ai_sec_sentinel.py --feedback CVE-2026-119712 ignored
+```
+Mark alerts as ignored or useful. The sentinel tracks patterns and can adjust thresholds.
+
+**Auto-remediation hooks:**
+Set `auto_remediate: true` in config. The sentinel exposes hooks for:
+- Creating patch branches
+- Opening PRs with version bumps
+- Quarantining vulnerable dependencies
+- Notifying team channels
 
 ## Cron
 
