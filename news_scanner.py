@@ -81,7 +81,7 @@ def _is_negative_sentiment(text: str) -> bool:
 def scan_news(max_items: int = 50) -> list[dict]:
     """Scan configured RSS/news sources for threats matching YOUR keywords."""
     if feedparser is None:
-        return []
+        raise RuntimeError("News monitoring requires feedparser; install requirements.txt")
 
     config = _load_config()
     news_config = config.get("news", {})
@@ -91,12 +91,21 @@ def scan_news(max_items: int = 50) -> list[dict]:
     seen = set(state.get("seen_news", []))
 
     alerts = []
+    succeeded = 0
+    failed = 0
     for source in sources:
         try:
             feed = feedparser.parse(source)
-        except Exception:
+            status = getattr(feed, "status", 200)
+            if isinstance(status, int) and status >= 400:
+                raise RuntimeError(f"RSS source returned HTTP {status}")
+            entries = feed.entries
+            succeeded += 1
+        except Exception as error:
+            failed += 1
+            print(f"RSS source unavailable: {source} ({type(error).__name__})")
             continue
-        for entry in feed.entries[:max_items]:
+        for entry in entries[:max_items]:
             title = entry.get("title", "")
             link = entry.get("link", "")
             summary = entry.get("summary", "")
@@ -125,6 +134,10 @@ def scan_news(max_items: int = 50) -> list[dict]:
             })
             seen.add(item_id)
 
+    if sources and not succeeded:
+        raise RuntimeError("Every configured RSS source failed; news coverage unavailable")
+    if failed:
+        print(f"NEWS COVERAGE WARNING: {failed} of {len(sources)} feeds unavailable")
     # Only the caller can mark a news alert delivered after its sink succeeds.
     # Scanning itself is read-only, including in dry-run mode.
     return alerts
