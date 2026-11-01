@@ -1,5 +1,9 @@
 # Twinthos Sentinel
 
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/12345/badge)](https://www.bestpractices.dev/projects/12345)
+
+> OSPS Baseline Level 1 — in progress. See SECURITY.md for disclosure policy.
+
 Continuous threat intelligence for organisations running AI agents and automation.
 
 ## Alert channels
@@ -74,6 +78,15 @@ See ARCHITECTURE.md for system design. See THREAT_MODEL.md for security analysis
 ## Version
 
 v1.4.1 — see CHANGELOG.md for history.
+
+## OpenSSF Compliance
+
+This project is working towards OpenSSF OSPS Baseline Level 1 compliance.
+Controls met: SECURITY.md, dependabot, CI tests, README, LICENSE, CONTRIBUTING.md, CODE_OF_CONDUCT.md, CHANGELOG.md, pinned dependencies, branch protection.
+
+Pending: MFA on GitHub account, signed releases, SBOM generation in CI.
+
+Badge registration: https://www.bestpractices.dev
 
 ## License
 

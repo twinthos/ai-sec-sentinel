@@ -4,8 +4,16 @@
 
 | Version | Supported |
 |---------|-----------|
-| 1.2.x   | Yes       |
-| < 1.2   | No        |
+| 1.4.x   | Yes       |
+| 1.3.x   | Yes       |
+| < 1.3   | No        |
+
+## Response SLA
+
+- Acknowledgement: within 48 hours
+- Initial assessment: within 7 days
+- Fix or mitigation: within 30 days for critical, 90 days for non-critical
+- Public disclosure: after fix is available, coordinated with reporter
 
 ## Reporting a Vulnerability
 
