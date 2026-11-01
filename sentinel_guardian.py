@@ -42,6 +42,87 @@ class ObserveLayer:
         self._persist(event)
         return event
 
+    def snapshot_mcp_tools(self, config_path: str) -> dict:
+        """Snapshot MCP tool definitions for rug-pull detection."""
+        import json, hashlib
+        if not os.path.exists(config_path):
+            return {"status": "no_config"}
+        with open(config_path) as f:
+            config = json.load(f)
+        servers = config.get("mcpServers", {})
+        snapshot = {}
+        for name, srv in servers.items():
+            tools = srv.get("tools", [])
+            for tool in tools:
+                tool_name = tool.get("name", "unknown")
+                tool_desc = tool.get("description", "")
+                snapshot[f"{name}:{tool_name}"] = hashlib.sha256(tool_desc.encode()).hexdigest()
+        # Save snapshot
+        snap_file = Path(config_path).with_suffix(".toolsnapshot")
+        snap_file.write_text(json.dumps(snapshot, indent=2))
+        return {"status": "snapshotted", "tools": len(snapshot)}
+
+    def detect_rug_pull(self, config_path: str) -> list:
+        """Detect if MCP tool descriptions changed since last snapshot (rug-pull)."""
+        import json, hashlib
+        findings = []
+        snap_file = Path(config_path).with_suffix(".toolsnapshot")
+        if not snap_file.exists():
+            return [{"status": "no_baseline", "message": "Run snapshot_mcp_tools first"}]
+        baseline = json.loads(snap_file.read_text())
+        if not os.path.exists(config_path):
+            return [{"status": "config_missing"}]
+        with open(config_path) as f:
+            config = json.load(f)
+        servers = config.get("mcpServers", {})
+        current = {}
+        for name, srv in servers.items():
+            tools = srv.get("tools", [])
+            for tool in tools:
+                tool_name = tool.get("name", "unknown")
+                tool_desc = tool.get("description", "")
+                current[f"{name}:{tool_name}"] = hashlib.sha256(tool_desc.encode()).hexdigest()
+        # Detect changes
+        for key, hash_val in current.items():
+            if key in baseline and baseline[key] != hash_val:
+                findings.append({
+                    "tool": key,
+                    "change": "description_modified",
+                    "severity": "CRITICAL",
+                    "message": "MCP tool description changed since baseline — possible rug-pull attack",
+                })
+        # Detect new tools
+        for key in current:
+            if key not in baseline:
+                findings.append({
+                    "tool": key,
+                    "change": "new_tool",
+                    "severity": "HIGH",
+                    "message": "New MCP tool detected — review before use",
+                })
+        # Detect removed tools
+        for key in baseline:
+            if key not in current:
+                findings.append({
+                    "tool": key,
+                    "change": "tool_removed",
+                    "severity": "MEDIUM",
+                    "message": "MCP tool removed",
+                })
+        # Detect tool name shadowing
+        tool_names = [k.split(":")[-1] for k in current]
+        seen = set()
+        for name in tool_names:
+            if name in seen:
+                findings.append({
+                    "tool": name,
+                    "change": "name_shadowing",
+                    "severity": "CRITICAL",
+                    "message": f"Tool name '{name}' registered by multiple servers — possible shadowing attack",
+                })
+            seen.add(name)
+        return findings
+
     def log_mcp_change(self, config_path: str, change_type: str, details: dict) -> dict:
         """Log an MCP configuration change."""
         event = {
@@ -199,6 +280,45 @@ class UnderstandLayer:
         # Transitive reach
         score += len(reachable) * 5
         return min(score, 100)
+
+    OWASP_AGENTIC_TOP10 = {
+        "ASI01": "Agent Goal Hijack",
+        "ASI02": "Tool Misuse and Exploitation",
+        "ASI03": "Identity and Privilege Abuse",
+        "ASI04": "Agentic Supply Chain Vulnerabilities",
+        "ASI05": "Unexpected Code Execution",
+        "ASI06": "Memory and Context Poisoning",
+        "ASI07": "Insecure Inter-Agent Communication",
+        "ASI08": "Cascading Failures",
+        "ASI09": "Human-Agent Trust Exploitation",
+        "ASI10": "Rogue Agents",
+    }
+
+    def map_to_owasp_agentic(self, finding: dict) -> list:
+        """Map a finding to OWASP Agentic Top 10."""
+        mappings = []
+        title = (finding.get("title", "") + " " + finding.get("summary", "") + " " + finding.get("message", "")).lower()
+        if any(kw in title for kw in ["prompt injection", "goal hijack", "instruction override"]):
+            mappings.append("ASI01 (Agent Goal Hijack)")
+        if any(kw in title for kw in ["tool misuse", "tool abuse", "unsafe tool"]):
+            mappings.append("ASI02 (Tool Misuse)")
+        if any(kw in title for kw in ["privilege", "identity", "escalation"]):
+            mappings.append("ASI03 (Identity and Privilege Abuse)")
+        if any(kw in title for kw in ["supply chain", "mcp", "plugin", "extension", "rug-pull", "shadowing"]):
+            mappings.append("ASI04 (Agentic Supply Chain)")
+        if any(kw in title for kw in ["code execution", "rce", "shell", "command"]):
+            mappings.append("ASI05 (Unexpected Code Execution)")
+        if any(kw in title for kw in ["memory", "context", "poisoning", "rag"]):
+            mappings.append("ASI06 (Memory and Context Poisoning)")
+        if any(kw in title for kw in ["agent-to-agent", "inter-agent", "a2a"]):
+            mappings.append("ASI07 (Insecure Inter-Agent Communication)")
+        if any(kw in title for kw in ["cascading", "propagation", "chain"]):
+            mappings.append("ASI08 (Cascading Failures)")
+        if any(kw in title for kw in ["trust", "social engineering", "deception"]):
+            mappings.append("ASI09 (Human-Agent Trust Exploitation)")
+        if any(kw in title for kw in ["rogue", "unauthorized", "malicious agent"]):
+            mappings.append("ASI10 (Rogue Agents)")
+        return mappings
 
     def get_passport(self, agent_id: str) -> dict:
         """Generate an Agent Passport (readable identity)."""

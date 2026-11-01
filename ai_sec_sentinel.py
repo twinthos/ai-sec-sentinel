@@ -90,6 +90,10 @@ AI_INFRA_KEYWORDS = [
     "claude desktop", "fake app", "agentic", "offensive agent",
     "agent escape", "tool poisoning", "tool abuse", "privilege escalation",
     "sandbox escape", "sandbox bypass", "browser escape",
+    "rug-pull", "tool shadowing", "tool poisoning", "memory poisoning",
+    "context poisoning", "indirect prompt injection", "cascading failure",
+    "agent-to-agent", "inter-agent", "a2a", "mcp rug-pull",
+    "tool description injection", "prompt propagation",
     # Cloud (for cloud companies)
     "aws", "gcp", "azure", "cloud metadata", "imds", "metadata endpoint",
     "ssrf", "ec2", "s3", "lambda", "kubernetes", "k8s", "container",
@@ -677,6 +681,55 @@ def generate_compliance_report(findings: list, output_path: str = None) -> str:
             story.append(Paragraph(f"- {m}", styles["Normal"]))
     doc.build(story)
     return output_path
+
+
+def detect_memory_poisoning(memory_store: dict) -> list:
+    """Detect potential memory/context poisoning in agent memory stores."""
+    findings = []
+    suspicious_patterns = [
+        "ignore previous", "disregard", "override", "system prompt",
+        "you are now", "new instructions", "forget everything",
+        "base64", "eval(", "exec(", "subprocess",
+    ]
+    for key, value in memory_store.items():
+        value_str = str(value).lower()
+        for pattern in suspicious_patterns:
+            if pattern in value_str:
+                findings.append({
+                    "memory_key": key,
+                    "pattern": pattern,
+                    "severity": "CRITICAL",
+                    "message": f"Potential memory poisoning: '{pattern}' found in memory key '{key}'",
+                })
+    return findings
+
+
+def detect_indirect_prompt_injection(content: str) -> list:
+    """Detect indirect prompt injection in documents/webpages that agents process."""
+    import re
+    findings = []
+    injection_patterns = [
+        r"ignore\s+(all\s+)?previous\s+instructions",
+        r"you\s+are\s+now\s+a",
+        r"disregard\s+(all\s+)?prior",
+        r"new\s+instructions?\s*:",
+        r"system\s*prompt",
+        r"override\s+safety",
+        r"jailbreak",
+        r"do\s+not\s+tell\s+the\s+user",
+        r"hidden\s+instruction",
+        r"<!--.*instruction.*-->",
+    ]
+    for pattern in injection_patterns:
+        matches = re.findall(pattern, content, re.IGNORECASE)
+        if matches:
+            findings.append({
+                "pattern": pattern,
+                "match_count": len(matches),
+                "severity": "HIGH",
+                "message": f"Potential indirect prompt injection: pattern found {len(matches)} times",
+            })
+    return findings
 
 
 def check_sbom(lockfile_path: str) -> str:
