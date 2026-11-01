@@ -1,14 +1,39 @@
 name: CI
 on: [push, pull_request]
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install --upgrade pip
       - run: pip install -r requirements.txt
-      - run: python3 -m compileall -q .
-      - run: python3 ai_sec_sentinel.py --version
-      - run: python3 -m unittest discover -s tests -v
+      - run: python -m compileall -q .
+      - run: python ai_sec_sentinel.py --version
+      - run: python -m unittest discover -s tests -v
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate Compose
+        run: docker compose config -q
+      - name: Build container
+        run: docker build -t twinthos-sentinel-ci:local .
+      - name: Check container starts the CLI
+        run: docker run --rm --entrypoint python3 twinthos-sentinel-ci:local ai_sec_sentinel.py --version
