@@ -363,8 +363,10 @@ class ControlLayer:
                 return json.loads(self.policy_file.read_text())
             except Exception:
                 pass
-        # Invalid policy files must never quietly create an allow-all configuration.
-        raise ValueError("Guardian policies missing or invalid; configure explicit policy rules")
+        if self.policy_file.exists():
+            raise ValueError("Guardian policy file is invalid")
+        # Missing policy file: deny all operations until policies are installed.
+        return []
 
     def evaluate(self, agent_id: str, tool_name: str, params: dict) -> dict:
         """Evaluate a tool call against policies. Returns allow/warn/ask/block."""
