@@ -327,6 +327,21 @@ def extract_fix_version(entry: dict) -> str | None:
     return m.group(1) if m else None
 
 
+def generate_fix_command(entry: dict, ecosystem: str = "python") -> str | None:
+    """Generate a fix command for a vulnerable dependency."""
+    fix = extract_fix_version(entry)
+    if not fix:
+        return None
+    raw_id = entry.get("id", "").split("#")[0].strip()
+    if ecosystem == "python":
+        return f"pip install --upgrade {raw_id.split('-')[0]}=={fix}" if raw_id else None
+    elif ecosystem == "npm":
+        return f"npm install {raw_id}@{fix}" if raw_id else None
+    elif ecosystem == "go":
+        return f"go get {raw_id}@{fix}" if raw_id else None
+    return None
+
+
 def format_alert(entry: dict, epss_score: float | None = None, in_kev: bool = False,
                  cvss: float | None = None) -> str:
     raw_id = entry.get("id", "N/A")
@@ -532,6 +547,9 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
             msg = f"🔍 Lockfile scan: <b>{len(vulns)} AI-related vulnerabilities</b> in {Path(lockfile).name}\n"
             for v in vulns[:10]:
                 msg += f"• {v.get('id', 'N/A')}\n"
+                fix_cmd = generate_fix_command(v, ecosystem)
+                if fix_cmd:
+                    msg += f"  → Fix: <code>{html.escape(fix_cmd)}</code>\n"
             send_telegram(msg, token, chat)
         else:
             send_telegram(f"✅ Lockfile clean: {Path(lockfile).name}", token, chat)
@@ -658,6 +676,24 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
     if lockfile:
         stats["lockfile_vulns"] = len(vulns)
 
+    # Send digest if in digest mode
+    if os.getenv("SENTINEL_DIGEST") == "1" and (ai_entries or supplier_entries or news_alerts):
+        digest = f"📋 <b>Twinthos Sentinel Digest</b>\n\n"
+        digest += f"Scanned {len(entries)} CVEs, {len(new_entries)} new, {len(ai_entries)} AI-related.\n"
+        digest += f"{alerts_sent} alerts sent, {stats['cisa_kev_hits']} CISA KEV hits, {stats['high_epss']} high-EPSS.\n\n"
+        if ai_entries:
+            digest += "<b>Top AI threats:</b>\n"
+            for e in ai_entries[:5]:
+                cid = e.get("id", "").split("#")[0].strip()
+                sev = severity_rank(e)
+                sev_label = {3: "CRITICAL", 2: "HIGH", 1: "MEDIUM", 0: "LOW"}.get(sev, "UNKNOWN")
+                digest += f"• {cid} ({sev_label})\n"
+        if supplier_entries:
+            digest += f"\n<b>Supplier alerts:</b> {len(supplier_entries)}\n"
+        if news_alerts:
+            digest += f"\n<b>News alerts:</b> {len(news_alerts)}\n"
+        send_telegram(digest, token, chat)
+
     print(f"  {stats['feed_fetched']} fetched, {stats['new_entries']} new, {stats['ai_related']} AI-related, {alerts_sent} alerts sent, {stats['cisa_kev_hits']} CISA KEV, {stats['high_epss']} high-EPSS")
 
     # Adaptive: if user consistently ignores certain keywords, lower their weight
@@ -687,6 +723,7 @@ def main():
     parser.add_argument("--telegram-chat", default=os.getenv("TELEGRAM_CHAT_ID", ""))
     parser.add_argument("--webhook-port", type=int, default=0, help="Start webhook server for Telegram callback buttons")
     parser.add_argument("--dry-run", action="store_true", help="Print alerts to stdout without sending")
+    parser.add_argument("--digest", action="store_true", help="Send a single digest summary instead of individual alerts")
     args = parser.parse_args()
 
     # Load config
@@ -748,6 +785,8 @@ def main():
 
     if args.dry_run:
         os.environ["SENTINEL_DRY_RUN"] = "1"
+    if args.digest:
+        os.environ["SENTINEL_DIGEST"] = "1"
 
     token = args.telegram_token or config.get("telegram", {}).get("token", "")
     chat = args.telegram_chat or config.get("telegram", {}).get("chat_id", "")
