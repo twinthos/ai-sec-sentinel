@@ -20,9 +20,11 @@ Usage:
 """
 
 import argparse
+import html
 import json
 import os
 import re
+import signal
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -32,6 +34,20 @@ try:
     import requests
 except ImportError:
     sys.exit("Missing dependency: requests\nInstall with: pip install requests")
+
+def _retry(fn, max_attempts=3, delay=2):
+    """Retry a function with exponential backoff."""
+    import time as _t
+    last_exc = None
+    for attempt in range(max_attempts):
+        try:
+            return fn()
+        except Exception as e:
+            last_exc = e
+            if attempt < max_attempts - 1:
+                _t.sleep(delay * (2 ** attempt))
+    raise last_exc
+
 
 CVE_NOW_FEED = "https://cve.now/feed?format=json"
 CVE_NOW_API = "https://cve.now/api/v1/entries"
@@ -114,7 +130,7 @@ def _word_boundary(text: str, kw: str) -> bool:
     pattern = r"\b" + re.escape(kw) + r"\b"
     return re.search(pattern, text, re.IGNORECASE) is not None
 
-# Synonym map: common alternate spellings / product names
+# Synonym map: alternate spellings / product names (only non-trivial variants)
 AI_SYNONYMS = {
     "langchain": ["lang chain", "langchain"],
     "llamaindex": ["llama index", "llamaindex"],
@@ -178,6 +194,11 @@ def is_ai_related(entry: dict) -> bool:
 
 def severity_rank(entry: dict) -> int:
     cvss = entry.get("cvss")
+    if isinstance(cvss, str):
+        try:
+            cvss = float(cvss)
+        except (ValueError, TypeError):
+            cvss = None
     if isinstance(cvss, (int, float)):
         if cvss >= 9.0:
             return 3
@@ -189,6 +210,11 @@ def severity_rank(entry: dict) -> int:
 
     severity = entry.get("severity") or {}
     cvss = severity.get("cvss")
+    if isinstance(cvss, str):
+        try:
+            cvss = float(cvss)
+        except (ValueError, TypeError):
+            cvss = None
     if isinstance(cvss, (int, float)):
         if cvss >= 9.0:
             return 3
@@ -209,18 +235,20 @@ def severity_rank(entry: dict) -> int:
 
 
 def fetch_feed(limit: int = 100) -> list[dict]:
-    try:
+    def _do():
         r = requests.get(CVE_NOW_FEED, timeout=30)
         r.raise_for_status()
         data = r.json()
         return data.get("items", [])[:limit]
+    try:
+        return _retry(_do)
     except Exception as e:
         print(f"Feed fetch error: {e}")
         return []
 
 
 def fetch_entry(cve_id: str) -> dict | None:
-    try:
+    def _do():
         r = requests.get(f"{CVE_NOW_API}/{cve_id}", timeout=15)
         if r.status_code == 200:
             data = r.json()
@@ -230,19 +258,24 @@ def fetch_entry(cve_id: str) -> dict | None:
             if not data.get("summary"):
                 data["summary"] = data.get("originalDescription", "")
             return data
+        return None
+    try:
+        return _retry(_do)
     except Exception:
-        pass
-    return None
+        return None
 
 
 def fetch_cisa_kev() -> dict:
-    try:
+    def _do():
         r = requests.get(CISA_KEV_URL, timeout=30)
         if r.status_code == 200:
             return r.json()
+        return {}
+    try:
+        return _retry(_do)
     except Exception as e:
         print(f"CISA KEV fetch error: {e}")
-    return {}
+        return {}
 
 
 def fetch_epss_scores(cve_ids: list[str]) -> dict:
@@ -274,19 +307,23 @@ def filter_new(entries: list[dict], since: datetime) -> list[dict]:
     for e in entries:
         ds = e.get("date_modified") or e.get("date_published")
         if not ds:
+            # Include entries without dates (assume recent)
+            out.append(e)
             continue
         try:
             dt = datetime.fromisoformat(ds.replace("Z", "+00:00"))
             if dt > since:
                 out.append(e)
         except Exception:
-            continue
+            # Include on parse failure (don't silently drop)
+            out.append(e)
     return out
 
 
 def extract_fix_version(entry: dict) -> str | None:
     text = entry.get("content_text", "") + " " + (entry.get("summary") or "")
-    m = re.search(r"(?:fixed in|upgrade to|patched in|version)[:\s]+(\d+[\.\w-]*)", text, re.IGNORECASE)
+    # Require at least one dot in version (e.g., 1.2.3, not just "2")
+    m = re.search(r"(?:fixed in|upgrade to|patched in|version)[:\s]+(\d+\.\d+(?:[\.\w-]*)?)", text, re.IGNORECASE)
     return m.group(1) if m else None
 
 
@@ -300,9 +337,10 @@ def format_alert(entry: dict, epss_score: float | None = None, in_kev: bool = Fa
     sev_emoji = {3: "🔴", 2: "🟠", 1: "🟡"}.get(sev, "⚪")
     sev_label = {3: "CRITICAL", 2: "HIGH", 1: "MEDIUM", 0: "LOW"}.get(sev, "UNKNOWN")
 
-    clean_title = __import__("html").escape(title.split("#")[0].strip())
+    clean_title = html.escape(title.split("#")[0].strip())
+    clean_cve_id = html.escape(cve_id)
     msg = f"{sev_emoji} <b>AI Security Alert — {sev_label}</b>\n\n"
-    msg += f"<b>{cve_id}</b>\n"
+    msg += f"<b>{clean_cve_id}</b>\n"
     msg += f"{clean_title[:220]}\n\n"
 
     if cvss is not None:
@@ -312,11 +350,11 @@ def format_alert(entry: dict, epss_score: float | None = None, in_kev: bool = Fa
     if in_kev:
         msg += "🛑 <b>CISA KEV — Actively exploited</b>  "
 
-    msg += f"\n🔗 <a href='{url}'>{cve_id}</a>"
+    msg += f"\n🔗 <a href='https://cve.now/{clean_cve_id}'>{clean_cve_id}</a>"
 
     fix = extract_fix_version(entry)
     if fix:
-        msg += f"\n\n✅ Fix: upgrade to <b>{fix}</b>"
+        msg += f"\n\n✅ Fix: upgrade to <b>{html.escape(fix)}</b>"
 
     return msg
 
@@ -326,6 +364,13 @@ def send_telegram(message: str, token: str, chat_id: str, cve_id: str = "") -> b
         print("[TELEGRAM NOT CONFIGURED]")
         print(message[:800])
         return False
+    # Dry-run mode: print to stdout instead of sending
+    if os.getenv("SENTINEL_DRY_RUN") == "1":
+        print(f"[DRY-RUN] {message[:500]}")
+        return True
+
+    # Rate limiting: small delay between sends
+    time.sleep(0.5)
     try:
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         payload = {
@@ -344,6 +389,11 @@ def send_telegram(message: str, token: str, chat_id: str, cve_id: str = "") -> b
                 ]
             }
         r = requests.post(url, json=payload, timeout=15)
+        if r.status_code == 429:
+            retry_after = r.json().get("parameters", {}).get("retry_after", 5)
+            print(f"Telegram rate limited, waiting {retry_after}s")
+            time.sleep(retry_after)
+            r = requests.post(url, json=payload, timeout=15)
         ok = r.status_code == 200 and r.json().get("ok")
         print(f"Telegram: {'sent' if ok else 'failed'} ({r.status_code})")
         return ok
@@ -377,12 +427,12 @@ def check_lockfile(lockfile_path: str, ecosystem: str) -> list[dict]:
     except Exception as e:
         print(f"Lockfile API error: {e}")
 
-    # Offline fallback: basic local pattern matching
-    return _offline_lockfile_check(path, content, ecosystem)
+    # OSV.dev fallback: query OSV for known vulnerabilities
+    return _osv_lockfile_check(path, content, ecosystem)
 
 
-def _offline_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
-    """Offline fallback when cve.now API is unavailable."""
+def _osv_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
+    """Query OSV.dev for known vulnerabilities (fallback when cve.now API is unavailable)."""
     vulns = []
     lines = content.splitlines()
     for line in lines:
@@ -470,6 +520,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
     kev_ids = {v.get("cveID") for v in cisa_kev.get("vulnerabilities", []) if v.get("cveID")}
 
     alerts_sent = 0
+    vulns = []
 
     # Lockfile scan
     lockfile = config.get("lockfile")
@@ -553,6 +604,23 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
                     seen.add(raw_id)
             break
 
+    # Run Layer 2 plugins if available
+    plugin_findings = []
+    try:
+        from plugins.canary_prompts import run_canary_tests
+        plugin_findings.extend(run_canary_tests())
+    except Exception:
+        pass
+    try:
+        from plugins.mcp_drift import scan_mcp_drift
+        mcp_path = config.get("mcp_config_path")
+        if mcp_path:
+            plugin_findings.extend(scan_mcp_drift(mcp_path))
+    except Exception:
+        pass
+    if plugin_findings:
+        print(f"  Plugin findings: {len(plugin_findings)}")
+
     stats = {
         "feed_fetched": len(entries),
         "new_entries": len(new_entries),
@@ -588,7 +656,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         alerts_sent += 1
 
     if lockfile:
-        stats["lockfile_vulns"] = len(vulns) if vulns is not None else 0
+        stats["lockfile_vulns"] = len(vulns)
 
     print(f"  {stats['feed_fetched']} fetched, {stats['new_entries']} new, {stats['ai_related']} AI-related, {alerts_sent} alerts sent, {stats['cisa_kev_hits']} CISA KEV, {stats['high_epss']} high-EPSS")
 
@@ -618,6 +686,7 @@ def main():
     parser.add_argument("--telegram-token", default=os.getenv("TELEGRAM_BOT_TOKEN", ""))
     parser.add_argument("--telegram-chat", default=os.getenv("TELEGRAM_CHAT_ID", ""))
     parser.add_argument("--webhook-port", type=int, default=0, help="Start webhook server for Telegram callback buttons")
+    parser.add_argument("--dry-run", action="store_true", help="Print alerts to stdout without sending")
     args = parser.parse_args()
 
     # Load config
@@ -665,28 +734,48 @@ def main():
 
     # Feedback mode
     if args.feedback is not None:
+        if len(args.feedback) < 1:
+            print("Usage: --feedback CVE-ID [useful|ignored]")
+            return
         cve_id = args.feedback[0].split("#")[0].strip()
         action = args.feedback[1] if len(args.feedback) > 1 else "ignored"
+        if action not in ("useful", "ignored"):
+            print(f"Invalid action: {action}. Use 'useful' or 'ignored'.")
+            return
         record_feedback(cve_id, action)
         print(f"Feedback recorded: {cve_id} -> {action}")
         return
+
+    if args.dry_run:
+        os.environ["SENTINEL_DRY_RUN"] = "1"
 
     token = args.telegram_token or config.get("telegram", {}).get("token", "")
     chat = args.telegram_chat or config.get("telegram", {}).get("chat_id", "")
 
     if args.webhook_port:
+        secret = config.get("telegram", {}).get("webhook_secret", "")
         print(f"Starting webhook server on port {args.webhook_port}...")
-        _webhook_server(token, args.webhook_port)
+        _webhook_server(token, args.webhook_port, secret=secret)
         return
 
     if args.daemon:
+        # Graceful shutdown handler
+        _shutdown = {"flag": False}
+        def _sig_handler(signum, frame):
+            print(f"\nReceived signal {signum}, saving state and shutting down...")
+            _shutdown["flag"] = True
+        signal.signal(signal.SIGTERM, _sig_handler)
+        signal.signal(signal.SIGINT, _sig_handler)
+
         print(f"Starting daemon mode — scanning every {args.interval} minutes...")
-        while True:
+        while not _shutdown["flag"]:
             try:
                 run_scan(config, token, chat)
             except Exception as e:
                 print(f"Scan error: {e}")
-            time.sleep(args.interval * 60)
+            if not _shutdown["flag"]:
+                time.sleep(args.interval * 60)
+        print("Daemon stopped gracefully.")
     else:
         run_scan(config, token, chat)
 
@@ -704,12 +793,20 @@ def _handle_callback_query(update: dict, token: str):
         send_telegram(f"✅ Feedback recorded: <b>{cve_id}</b> → {action}", token, str(chat_id))
 
 
-def _webhook_server(token: str, port: int = 8080):
+def _webhook_server(token: str, port: int = 8080, secret: str = ""):
     """Simple HTTP server to receive Telegram webhook updates."""
     from http.server import HTTPServer, BaseHTTPRequestHandler
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
+            # Verify secret token
+            if secret:
+                provided = self.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+                if provided != secret:
+                    self.send_response(403)
+                    self.end_headers()
+                    self.wfile.write(b"Forbidden")
+                    return
             try:
                 length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(length)

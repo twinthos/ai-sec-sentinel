@@ -22,6 +22,14 @@ except ImportError:
     feedparser = None
     requests = None
 
+# Import atomic_write from main module (with fallback)
+try:
+    from ai_sec_sentinel import atomic_write
+except ImportError:
+    def atomic_write(path, data):
+        path = Path(path)
+        path.write_text(data, encoding="utf-8")
+
 NEWS_SOURCES = [
     "https://feeds.bbci.co.uk/news/technology/rss.xml",
     "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml",
@@ -55,7 +63,11 @@ def _save_state(state: dict):
 
 def _matches_keywords(entry_text: str, keywords: list[str]) -> bool:
     text = entry_text.lower()
-    return any(kw.lower() in text for kw in keywords)
+    for kw in keywords:
+        pattern = r"\b" + re.escape(kw.lower()) + r"\b"
+        if re.search(pattern, text):
+            return True
+    return False
 
 def _is_negative_sentiment(text: str) -> bool:
     negative = [
