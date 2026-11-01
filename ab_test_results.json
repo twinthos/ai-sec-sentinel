@@ -1,0 +1,54 @@
+[
+  {
+    "variant": "severity_0",
+    "exit_code": 0,
+    "elapsed_seconds": 1.02,
+    "fetched": 20,
+    "new": 4,
+    "ai_related": 2,
+    "alerts_sent": 0,
+    "cisa_kev": 0,
+    "high_epss": 0,
+    "risk_score": 50,
+    "risk_level": "HIGH"
+  },
+  {
+    "variant": "severity_1",
+    "exit_code": 0,
+    "elapsed_seconds": 0.37,
+    "fetched": 20,
+    "new": 4,
+    "ai_related": 2,
+    "alerts_sent": 0,
+    "cisa_kev": 0,
+    "high_epss": 0,
+    "risk_score": 6,
+    "risk_level": "LOW"
+  },
+  {
+    "variant": "severity_2",
+    "exit_code": 0,
+    "elapsed_seconds": 0.38,
+    "fetched": 20,
+    "new": 4,
+    "ai_related": 2,
+    "alerts_sent": 0,
+    "cisa_kev": 0,
+    "high_epss": 0,
+    "risk_score": 6,
+    "risk_level": "LOW"
+  },
+  {
+    "variant": "severity_3",
+    "exit_code": 0,
+    "elapsed_seconds": 0.34,
+    "fetched": 20,
+    "new": 4,
+    "ai_related": 2,
+    "alerts_sent": 0,
+    "cisa_kev": 0,
+    "high_epss": 0,
+    "risk_score": 6,
+    "risk_level": "LOW"
+  }
+]
