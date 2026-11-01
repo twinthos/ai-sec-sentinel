@@ -48,7 +48,7 @@ def _load_config():
     return {}
 
 def _load_state():
-    state_path = Path(__file__).with_name("sentinel_state.json")
+    state_path = Path(__import__("os").environ.get("SENTINEL_DATA_DIR", Path(__file__).parent)) / "sentinel_state.json"
     if state_path.exists():
         try:
             return json.loads(state_path.read_text(encoding="utf-8"))
@@ -89,9 +89,6 @@ def scan_news(max_items: int = 50) -> list[dict]:
     sources = news_config.get("sources", NEWS_SOURCES)
     state = _load_state()
     seen = set(state.get("seen_news", []))
-    # Preserve main module state to avoid clobbering
-    _main_seen = state.get("seen", [])
-    _main_last_run = state.get("last_run")
 
     alerts = []
     for source in sources:
@@ -118,6 +115,7 @@ def scan_news(max_items: int = 50) -> list[dict]:
 
             severity = "HIGH" if _matches_keywords(blob, ["breach", "attack", "ransomware", "zero-day"]) else "MEDIUM"
             alerts.append({
+                "id": item_id,
                 "title": title,
                 "link": link,
                 "summary": summary[:200],
@@ -127,9 +125,6 @@ def scan_news(max_items: int = 50) -> list[dict]:
             })
             seen.add(item_id)
 
-    state["seen_news"] = list(seen)[-200:]
-    # Restore main module state
-    state["seen"] = _main_seen
-    state["last_run"] = _main_last_run
-    _save_state(state)
+    # Only the caller can mark a news alert delivered after its sink succeeds.
+    # Scanning itself is read-only, including in dry-run mode.
     return alerts
