@@ -762,7 +762,7 @@ def check_sbom(lockfile_path: str) -> str:
     return "\n".join(lines)
 
 
-def _osv_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
+def _osv_lockfile_check(path: Path, content: str, ecosystem: str, strict: bool = False) -> list[dict]:
     """Query OSV only for packages with exact, known versions.
 
     OSV handles ecosystem-specific version comparison. Never compare version
@@ -776,11 +776,14 @@ def _osv_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
     ecosystems = {"python": "PyPI", "npm": "npm", "go": "Go", "rust": "crates.io",
                   "ruby": "RubyGems", "php": "Packagist", "dotnet": "NuGet"}
     osv_ecosystem = ecosystems.get(ecosystem)
-    if not osv_ecosystem:
-        print(f"OSV: unsupported ecosystem {ecosystem!r}")
+    if not osv_ecosystem or ecosystem not in ("python", "npm", "go"):
+        if strict:
+            raise RuntimeError(f"Local OSV parser does not support {ecosystem!r}; use a supported lockfile or external SCA tool")
+        print(f"OSV: unsupported local parser for {ecosystem!r}")
         return []
 
     packages = {}
+    unpinned = []
     if ecosystem == "python":
         for line in content.splitlines():
             line = line.strip()
@@ -789,10 +792,14 @@ def _osv_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
             match = re.match(r"^([A-Za-z0-9_.-]+)\s*==\s*([A-Za-z0-9_.!+-]+)(?:\s*;.*)?$", line)
             if match:
                 packages[match.group(1)] = match.group(2)
+            elif any(word in line.lower() for word in relevant):
+                unpinned.append(line[:80])
     elif ecosystem == "npm":
         try:
             lock = json.loads(content)
-        except (json.JSONDecodeError, ValueError):
+        except (json.JSONDecodeError, ValueError) as exc:
+            if strict:
+                raise RuntimeError("Invalid npm package-lock.json") from exc
             print("OSV: invalid npm lockfile JSON")
             return []
         # package-lock versions 2/3 store installed packages in 'packages'.
@@ -807,9 +814,11 @@ def _osv_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
     elif ecosystem == "go":
         for line in content.splitlines():
             parts = line.split()
-            if len(parts) >= 2 and not parts[1].endswith("/go.mod"):
+            if len(parts) == 3 and parts[1].startswith("v") and not parts[1].endswith("/go.mod"):
                 packages[parts[0]] = parts[1].removeprefix("v")
 
+    if strict and unpinned:
+        raise RuntimeError(f"{len(unpinned)} AI dependency requirement(s) are not exactly pinned; installed version unknown")
     findings = []
     skipped = 0
     for package, version in sorted(packages.items()):
@@ -844,6 +853,8 @@ def _osv_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
             print(f"OSV query failed for {package}: {type(error).__name__}")
 
     if skipped:
+        if strict:
+            raise RuntimeError(f"OSV could not check {skipped} package(s); vulnerability status UNKNOWN")
         print(f"OSV: {skipped} package(s) could not be checked; results are incomplete.")
     if ecosystem == "python" and not packages:
         print("OSV: no exactly pinned dependencies found; cannot assess unpinned versions.")
@@ -882,7 +893,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         # Consent check for uploading lockfile to cve.now
         if not config.get("allow_lockfile_upload", False):
             print(f"Lockfile scan (offline only): {lockfile} — set allow_lockfile_upload=true to use cve.now API")
-            vulns = _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem)
+            vulns = _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem, strict=True)
         else:
             print(f"Scanning lockfile: {lockfile}")
             vulns = check_lockfile(lockfile, ecosystem)
@@ -1189,7 +1200,11 @@ def main():
             print(f"ERROR: lockfile does not exist: {lockfile}")
             return 2
         print(f"Checking lockfile: {lockfile} (ecosystem: {ecosystem})")
-        vulns = check_lockfile(lockfile, ecosystem) if config.get("allow_lockfile_upload") else _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem)
+        try:
+            vulns = _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem, strict=True)
+        except (OSError, RuntimeError, ValueError) as error:
+            print(f"INCOMPLETE: {error}")
+            return 2
         if vulns:
             print(f"Found {len(vulns)} AI-related vulnerabilities:")
             for v in vulns:
@@ -1218,7 +1233,7 @@ def main():
         kev_hits = sum(1 for e in ai_entries if e.get("id", "").split("#")[0].strip() in kev_ids)
         lockfile_vulns = 0
         if config.get("lockfile"):
-            vulns = check_lockfile(config["lockfile"], config.get("ecosystem", "python"))
+            vulns = _osv_lockfile_check(Path(config["lockfile"]), Path(config["lockfile"]).read_text(encoding="utf-8"), config.get("ecosystem", "python"), strict=True)
             lockfile_vulns = len(vulns)
         ignored = [cid for cid, data in feedback.items() if data.get("action") == "ignored"]
         print(f"=== Sentinel Stats ===")
