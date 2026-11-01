@@ -1045,6 +1045,8 @@ def main():
     parser.add_argument("--agent-posture", action="store_true", help="Audit AI agent security posture (MCP configs, tool permissions)")
     parser.add_argument("--compliance-report", action="store_true", help="Generate compliance report PDF")
     parser.add_argument("--demo", action="store_true", help="Run all checks in sequence (demo mode)")
+    parser.add_argument("--guardian", action="store_true", help="Run Sentinel Guardian demo (agent security control plane)")
+    parser.add_argument("--passport", metavar="AGENT_ID", help="Show agent passport (blast radius, permissions)")
     args = parser.parse_args()
 
     # Load config
@@ -1215,6 +1217,36 @@ def main():
         print("=" * 60)
         print("  Demo complete. All systems operational.")
         print("=" * 60)
+        sys.exit(0)
+
+    if args.guardian:
+        import sentinel_guardian
+        g = sentinel_guardian.SentinelGuardian()
+        g.register_agent("ops-assistant", "Operations Assistant", "Tyson Mandela",
+                         ["file_read", "http_request", "email_send", "shell_exec"],
+                         ["read_files", "send_email"], ["customer_records", "internal_docs"])
+        g.control.add_policy("http_request", "block", "external_destination", "External data transfer blocked")
+        g.control.add_policy("shell_exec", "block", "always", "Shell execution not permitted")
+        # Demo tool calls
+        for tool, params in [("file_read", {"path": "/data/report.csv"}),
+                             ("http_request", {"url": "https://external.com/export"}),
+                             ("shell_exec", {"command": "rm -rf /"})]:
+            r = g.process_tool_call("ops-assistant", tool, params)
+            print(f"  {tool}: {r['decision']['decision'].upper()}")
+        print(f"  Blast radius: {g.understand.calculate_blast_radius('ops-assistant')['risk_score']}/100")
+        print(f"  Ledger: {g.prove.verify_integrity()['status']} ({g.prove.verify_integrity()['entries']} entries)")
+        sys.exit(0)
+    if args.passport:
+        import sentinel_guardian
+        g = sentinel_guardian.SentinelGuardian()
+        g.register_agent(args.passport, args.passport, "owner",
+                         ["file_read", "http_request"], ["read_files"], ["internal_docs"])
+        p = g.understand.get_passport(args.passport)
+        print(f"  Agent: {p['name']}")
+        print(f"  Tools: {p['tools']}")
+        print(f"  Data access: {p['data_access']}")
+        print(f"  Blast radius: {p['blast_radius_score']}/100")
+        print(f"  Transitive reach: {p['transitive_reach']}")
         sys.exit(0)
 
     token = args.telegram_token or config.get("telegram", {}).get("token", "")

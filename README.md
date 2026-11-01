@@ -53,6 +53,28 @@ This repository is the **reference implementation** of Twinthos Sentinel — the
 - **Feedback learning** — tracks useful vs ignored patterns, suggests keyword adjustments
 - **Risk score history** — tracks scores over time to show trends
 
+## Sentinel Guardian (v2.0 preview)
+
+The next evolution: from vulnerability monitor to **safety control plane for AI agents**.
+
+Four layers, operating outside the AI model:
+1. **OBSERVE** — monitor tool calls, MCP changes, agent behavior
+2. **UNDERSTAND** — map permissions, data flows, blast radius
+3. **CONTROL** — policy gate: allow, warn, ask, block (independent of the model)
+4. **PROVE** — tamper-evident evidence ledger, audit trail, replay
+
+Five capabilities:
+- **Agent Passport** — readable identity for every agent (owner, tools, permissions, blast radius)
+- **Permission Firewall** — policy engine that blocks dangerous tool calls before execution
+- **Blast Radius Map** — what an agent could reach if compromised
+- **Sentinel Replay Lab** — isolated simulations with evidence recording
+- **Proof Ledger** — append-only, tamper-evident audit trail
+
+```
+python3 ai_sec_sentinel.py --guardian    # Run Guardian demo
+python3 ai_sec_sentinel.py --passport ID # Show agent passport
+```
+
 ## 30-second install
 
 ```bash

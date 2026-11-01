@@ -1,0 +1,32 @@
+[
+  {
+    "tool": "http_request",
+    "action": "block",
+    "condition": "external_destination",
+    "reason": "External data transfer blocked"
+  },
+  {
+    "tool": "shell_exec",
+    "action": "block",
+    "condition": "always",
+    "reason": "Shell execution not permitted"
+  },
+  {
+    "tool": "file_read",
+    "action": "allow",
+    "condition": "always",
+    "reason": "File read permitted"
+  },
+  {
+    "tool": "http_request",
+    "action": "block",
+    "condition": "external_destination",
+    "reason": "External data transfer blocked"
+  },
+  {
+    "tool": "shell_exec",
+    "action": "block",
+    "condition": "always",
+    "reason": "Shell execution not permitted"
+  }
+]
