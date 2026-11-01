@@ -94,12 +94,35 @@ AI_INFRA_KEYWORDS = [
 
 
 def load_config() -> dict:
+    defaults = {
+        "scan_interval_minutes": 60,
+        "alert_min_severity": 1,
+        "allow_lockfile_upload": False,
+        "auto_remediate": False,
+        "learn_from_actions": True,
+        "webhook_url": "",
+        "webhook_platform": "slack",
+        "asset_criticality": {},
+    }
     if CONFIG_FILE.exists():
         try:
-            return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            raw = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            # Validate and merge with defaults
+            config = dict(defaults)
+            config.update(raw)
+            # Type validation
+            if not isinstance(config.get("alert_min_severity"), int):
+                config["alert_min_severity"] = 1
+            if config["alert_min_severity"] < 0 or config["alert_min_severity"] > 3:
+                config["alert_min_severity"] = 1
+            if not isinstance(config.get("allow_lockfile_upload"), bool):
+                config["allow_lockfile_upload"] = False
+            if not isinstance(config.get("auto_remediate"), bool):
+                config["auto_remediate"] = False
+            return config
         except Exception:
             pass
-    return {}
+    return defaults
 
 
 def load_state() -> dict:
@@ -133,7 +156,24 @@ def load_feedback() -> dict:
     return {}
 
 
+_feedback_timestamps = []
+
+def _check_feedback_rate_limit() -> bool:
+    import time
+    now = time.time()
+    # Remove timestamps older than 60 seconds
+    global _feedback_timestamps
+    _feedback_timestamps = [t for t in _feedback_timestamps if now - t < 60]
+    if len(_feedback_timestamps) >= 10:
+        return False
+    _feedback_timestamps.append(now)
+    return True
+
+
 def record_feedback(cve_id: str, action: str):
+    if not _check_feedback_rate_limit():
+        print("Rate limit: max 10 feedback actions per minute")
+        return
     fb = load_feedback()
     fb[cve_id] = {"action": action, "ts": datetime.now(timezone.utc).isoformat()}
     atomic_write(FEEDBACK_FILE, json.dumps(fb, indent=2))
@@ -425,7 +465,7 @@ def send_webhook(message: str, webhook_url: str, platform: str = "slack") -> boo
             payload = {"content": clean}
         else:
             payload = {"text": clean}
-        r = requests.post(webhook_url, json=payload, timeout=15)
+        r = requests.post(webhook_url, json=payload, timeout=15, verify=True)
         return r.status_code in (200, 204)
     except Exception as e:
         print(f"Webhook send failed: {e}")
@@ -461,12 +501,12 @@ def send_telegram(message: str, token: str, chat_id: str, cve_id: str = "") -> b
                     ]
                 ]
             }
-        r = requests.post(url, json=payload, timeout=15)
+        r = requests.post(url, json=payload, timeout=15, verify=True)
         if r.status_code == 429:
             retry_after = r.json().get("parameters", {}).get("retry_after", 5)
             print(f"Telegram rate limited, waiting {retry_after}s")
             time.sleep(retry_after)
-            r = requests.post(url, json=payload, timeout=15)
+            r = requests.post(url, json=payload, timeout=15, verify=True)
         ok = r.status_code == 200 and r.json().get("ok")
         print(f"Telegram: {'sent' if ok else 'failed'} ({r.status_code})")
         return ok
@@ -1004,6 +1044,7 @@ def main():
     parser.add_argument("--brand-check", metavar="BRAND", help="Check for typosquatting/impersonation domains")
     parser.add_argument("--agent-posture", action="store_true", help="Audit AI agent security posture (MCP configs, tool permissions)")
     parser.add_argument("--compliance-report", action="store_true", help="Generate compliance report PDF")
+    parser.add_argument("--demo", action="store_true", help="Run all checks in sequence (demo mode)")
     args = parser.parse_args()
 
     # Load config
@@ -1129,6 +1170,51 @@ def main():
         sample = [{"title": "AI agent vulnerability", "severity": "HIGH", "summary": "prompt injection in langchain"}]
         path = generate_compliance_report(sample)
         print(f"  Compliance report generated: {path}")
+        sys.exit(0)
+    if args.demo:
+        print("=" * 60)
+        print("  Twinthos Sentinel - Demo Mode")
+        print("=" * 60)
+        print()
+        print("[1/7] Live CVE scan (dry run)...")
+        print("  (use --dry-run for live scan)")
+        print()
+        print("[2/7] SBOM generation...")
+        print(check_sbom("requirements.txt"))
+        print()
+        print("[3/7] Extension integrity check...")
+        ext = check_extension_integrity()
+        if ext:
+            for r in ext:
+                print(f"  {r}")
+        else:
+            print("  No extensions found or no known malicious versions")
+        print()
+        print("[4/7] Brand protection check...")
+        brand = check_brand_protection("twinthos")
+        for r in brand[:4]:
+            print(f"  {r['domain']}: {r['status']} ({r['risk']})")
+        print()
+        print("[5/7] Agent posture audit...")
+        posture = check_agent_posture()
+        for r in posture:
+            print(f"  {r}")
+        print()
+        print("[6/7] Risk scoring + compliance...")
+        from risk_compliance import calculate_risk_score, generate_risk_report
+        sample_findings = [
+            {"title": "LangChain RCE via MCP", "severity": "CRITICAL", "in_kev": True, "epss": 0.95, "summary": "prompt injection in langchain"},
+            {"title": "CrewAI tool poisoning", "severity": "HIGH", "in_kev": False, "epss": 0.6, "summary": "mcp tool abuse"},
+        ]
+        print(generate_risk_report(sample_findings))
+        print()
+        print("[7/7] Compliance report PDF...")
+        path = generate_compliance_report(sample_findings)
+        print(f"  Generated: {path}")
+        print()
+        print("=" * 60)
+        print("  Demo complete. All systems operational.")
+        print("=" * 60)
         sys.exit(0)
 
     token = args.telegram_token or config.get("telegram", {}).get("token", "")

@@ -1,23 +1,18 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
+
+# Create non-root user
+RUN groupadd -r sentinel && useradd -r -g sentinel sentinel
 
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
 
-COPY ai_sec_sentinel.py .
-COPY news_scanner.py .
-COPY sentinel_config.json .
-COPY plugins/ plugins/
+# Create data directory with proper permissions
+RUN mkdir -p /data && chown -R sentinel:sentinel /data /app
 
-RUN useradd -m -u 1000 sentinel && chown -R sentinel:sentinel /app
+# Switch to non-root user
 USER sentinel
 
-VOLUME ["/data"]
-
-ENTRYPOINT ["python3", "/app/ai_sec_sentinel.py"]
-CMD ["--help"]
+ENV PYTHONUNBUFFERED=1
+CMD ["python3", "ai_sec_sentinel.py", "--daemon", "--interval", "60"]
