@@ -1139,6 +1139,7 @@ def main():
     parser.add_argument("--ecosystem", choices=["python", "npm", "rust", "go", "ruby", "php", "dotnet"])
     parser.add_argument("--check-only", action="store_true", help="Check pinned AI dependencies; exits nonzero on findings or incomplete coverage")
     parser.add_argument("--health", action="store_true", help="Check freshness of last successful real scan (no network I/O)")
+    parser.add_argument("--test-alert", action="store_true", help="Send a synthetic test alert to every configured destination")
     parser.add_argument("--feed-limit", type=int, default=100)
     parser.add_argument("--since-hours", type=int, default=24)
     parser.add_argument("--daemon", action="store_true", help="Continuous daemon mode")
@@ -1391,6 +1392,24 @@ def main():
 
     token = args.telegram_token or config.get("telegram", {}).get("token", "")
     chat = args.telegram_chat or config.get("telegram", {}).get("chat_id", "")
+
+    if args.test_alert:
+        if args.dry_run:
+            print("ERROR: --test-alert must send a real message; remove --dry-run")
+            return 2
+        destinations = []
+        message = "✅ <b>Twinthos Sentinel test alert</b> — delivery-path verification, no real vulnerability."
+        if token and chat:
+            destinations.append(("Telegram", send_telegram(message, token, chat)))
+        webhook = config.get("webhook_url", "")
+        if webhook:
+            destinations.append(("Webhook", send_webhook(message, webhook, config.get("webhook_platform", "slack"))))
+        if not destinations:
+            print("ERROR: no destinations configured for --test-alert")
+            return 2
+        for destination, sent in destinations:
+            print(f"TEST ALERT {destination}: {'ACKNOWLEDGED' if sent else 'FAILED'}")
+        return 0 if all(sent for _, sent in destinations) else 2
 
     if args.webhook_port:
         secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
