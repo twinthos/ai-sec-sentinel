@@ -18,16 +18,18 @@ from sentinel_guardian import SentinelGuardian
 PORT = int(os.getenv("GUARDIAN_PORT", "8098"))
 HOST = os.getenv("GUARDIAN_HOST", "127.0.0.1")
 GATE_API_KEY = os.getenv("GUARDIAN_API_KEY", "")
+ADMIN_API_KEY = os.getenv("GUARDIAN_ADMIN_API_KEY", "")
 MAX_BODY_BYTES = 64 * 1024
 
 guardian = SentinelGuardian()
 
 
 class GateHandler(BaseHTTPRequestHandler):
-    def _check_auth(self):
+    def _check_auth(self, admin=False):
         auth = self.headers.get("Authorization", "")
-        expected = "Bearer " + GATE_API_KEY
-        return bool(GATE_API_KEY) and hmac.compare_digest(auth, expected)
+        key = ADMIN_API_KEY if admin else GATE_API_KEY
+        expected = "Bearer " + key
+        return bool(key) and hmac.compare_digest(auth, expected)
 
     def _read_json(self):
         raw_length = self.headers.get("Content-Length", "")
@@ -49,16 +51,16 @@ class GateHandler(BaseHTTPRequestHandler):
             return None
         return data
 
-    def _authorized(self):
-        if not self._check_auth():
+    def _authorized(self, admin=False):
+        if not self._check_auth(admin=admin):
             self._respond(401, {"error": "Unauthorized"})
             return False
         return True
 
     def do_POST(self):
-        if not self._authorized():
-            return
         path = urlparse(self.path).path
+        if not self._authorized(admin=(path == "/register")):
+            return
         if path not in ("/evaluate", "/register", "/passport"):
             self._respond(404, {"error": "Not found"})
             return
@@ -166,6 +168,8 @@ class GateHandler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     if not GATE_API_KEY or len(GATE_API_KEY) < 24:
         raise SystemExit("Set GUARDIAN_API_KEY (at least 24 characters) before starting Guardian Gate")
+    if ADMIN_API_KEY and (len(ADMIN_API_KEY) < 24 or hmac.compare_digest(ADMIN_API_KEY, GATE_API_KEY)):
+        raise SystemExit("GUARDIAN_ADMIN_API_KEY must be distinct from GUARDIAN_API_KEY and at least 24 characters")
     server = HTTPServer((HOST, PORT), GateHandler)
     print(f"Guardian policy API listening on {HOST}:{PORT} (authenticated)")
     server.serve_forever()
