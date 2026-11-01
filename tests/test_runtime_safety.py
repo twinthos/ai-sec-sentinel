@@ -86,13 +86,13 @@ class RuntimeSafetyTests(unittest.TestCase):
 
     def test_osv_strict_fails_on_unpinned_ai_package(self):
         with self.assertRaisesRegex(RuntimeError, "not exactly pinned"):
-            sentinel._osv_lockfile_check(Path("requirements.txt"), "langchain>=0.3\\n", "python", strict=True)
+            sentinel._osv_lockfile_check(Path("requirements.txt"), "langchain>=0.3\n", "python", strict=True)
 
     def test_osv_strict_fails_on_network_problem(self):
         import requests
         with patch.object(sentinel.requests, "post", side_effect=requests.Timeout("timeout")):
             with self.assertRaisesRegex(RuntimeError, "UNKNOWN"):
-                sentinel._osv_lockfile_check(Path("requirements.txt"), "langchain==0.3.0\\n", "python", strict=True)
+                sentinel._osv_lockfile_check(Path("requirements.txt"), "langchain==0.3.0\n", "python", strict=True)
 
     def test_check_only_no_lockfile_is_not_health(self):
         with patch("sys.argv", ["sentinel", "--check-only"]):
