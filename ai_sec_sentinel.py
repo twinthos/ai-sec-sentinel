@@ -60,9 +60,10 @@ CVE_NOW_FEED = "https://cve.now/feed?format=json"
 CVE_NOW_API = "https://cve.now/api/v1/entries"
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 EPSS_API = "https://api.first.org/data/v1/epss"
-STATE_FILE = Path(__file__).with_name("sentinel_state.json")
+DATA_DIR = Path(os.getenv("SENTINEL_DATA_DIR", str(Path(__file__).parent)))
+STATE_FILE = DATA_DIR / "sentinel_state.json"
 CONFIG_FILE = Path(__file__).with_name("sentinel_config.json")
-FEEDBACK_FILE = Path(__file__).with_name("sentinel_feedback.json")
+FEEDBACK_FILE = DATA_DIR / "sentinel_feedback.json"
 
 AI_KEYWORDS = [
     "langchain", "llamaindex", "openai", "anthropic", "claude", "gpt",
@@ -144,11 +145,20 @@ def load_state() -> dict:
 
 
 def atomic_write(path, data):
-    """Write file atomically via temp + rename."""
-    import tempfile, os
-    tmp = path.parent / (path.name + ".tmp")
-    tmp.write_text(data, encoding="utf-8")
-    tmp.replace(path)
+    """Atomically replace a state file; do not expose user content to other users."""
+    import tempfile
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as out:
+            out.write(data)
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(name, path)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
 
 def save_state(state: dict):
     state["last_run"] = datetime.now(timezone.utc).isoformat()
@@ -465,7 +475,15 @@ def send_webhook(message: str, webhook_url: str, platform: str = "slack") -> boo
     """Send alert to Slack or Discord webhook."""
     if not webhook_url:
         return False
+    if os.getenv("SENTINEL_DRY_RUN") == "1":
+        print(f"[DRY-RUN webhook] {message[:300]}")
+        return True
     try:
+        from urllib.parse import urlparse
+        parsed = urlparse(webhook_url)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+            print("Webhook URL must be HTTPS without embedded credentials")
+            return False
         import re as _re
         clean = _re.sub(r'<[^>]+>', '', message)
         if platform == "slack":
@@ -482,14 +500,13 @@ def send_webhook(message: str, webhook_url: str, platform: str = "slack") -> boo
 
 
 def send_telegram(message: str, token: str, chat_id: str, cve_id: str = "") -> bool:
+    if os.getenv("SENTINEL_DRY_RUN") == "1":
+        print(f"[DRY-RUN Telegram] {message[:500]}")
+        return True
     if not token or not chat_id:
         print("[TELEGRAM NOT CONFIGURED]")
         print(message[:800])
         return False
-    # Dry-run mode: print to stdout instead of sending
-    if os.getenv("SENTINEL_DRY_RUN") == "1":
-        print(f"[DRY-RUN] {message[:500]}")
-        return True
 
     # Rate limiting: small delay between sends
     time.sleep(0.5)
@@ -835,7 +852,13 @@ def _osv_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
 
 
 def run_scan(config: dict, token: str = "", chat: str = "") -> int:
-    """Run one scan cycle. Returns number of alerts sent."""
+    """Run one scan cycle, returning successfully delivered alert count."""
+    dry_run = os.getenv("SENTINEL_DRY_RUN") == "1"
+    webhook_url = config.get("webhook_url", "")
+    if not dry_run and not ((token and chat) or webhook_url):
+        raise RuntimeError("No alert destination configured: set Telegram credentials or an HTTPS webhook (or use --dry-run)")
+    if not dry_run and webhook_url and not webhook_url.startswith("https://"):
+        raise RuntimeError("Webhook URL must use HTTPS")
     feed_limit = config.get("feed_limit", 100)
     since_hours = config.get("since_hours", 24)
     alert_min_sev = config.get("alert_min_severity", 1)  # Default: medium and above
@@ -948,7 +971,8 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         if webhook_url:
             webhook_sent = send_webhook(msg, webhook_url, config.get("webhook_platform", "slack"))
         if telegram_sent or webhook_sent:
-            seen.add(raw_id)
+            if not dry_run:
+                seen.add(raw_id)
             alerts_sent += 1
         else:
             # Queue failed alert for retry - do NOT mark as seen
@@ -993,23 +1017,32 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         if raw_id in seen:
             continue
         msg = f"🏢 <b>Supplier Threat Alert</b>\n\n"
-        msg += f"<b>{entry.get('title', 'Unknown')}</b>\n"
-        msg += f"{entry.get('summary', entry.get('content_text', ''))[:200]}\n\n"
+        msg += f"<b>{html.escape(str(entry.get('title', 'Unknown')))}</b>\n"
+        msg += f"{html.escape(str(entry.get('summary', entry.get('content_text', ''))[:200]))}\n\n"
         msg += f"🔗 <a href='https://cve.now/{raw_id}'>{raw_id}</a>"
         sent = send_telegram(msg, token, chat)
-        if sent:
-            seen.add(raw_id)
+        webhook_sent = send_webhook(msg, webhook_url, config.get("webhook_platform", "slack")) if webhook_url else False
+        if sent or webhook_sent:
+            if not dry_run:
+                seen.add(raw_id)
             alerts_sent += 1
 
-    # Send news alerts
+    # Send news alerts; unacknowledged news stays eligible on the next run.
+    delivered_news = set(state.get("seen_news", []))
     for alert in news_alerts:
-        msg = f"📰 <b>News Threat Alert — {alert['severity']}</b>\n\n"
-        msg += f"<b>{alert['title']}</b>\n"
-        msg += f"{alert['summary']}\n\n"
-        msg += f"🔗 <a href='{alert['link']}'>{alert['link']}</a>"
+        msg = f"📰 <b>News Threat Alert — {html.escape(str(alert['severity']))}</b>\n\n"
+        msg += f"<b>{html.escape(str(alert['title']))}</b>\n"
+        msg += f"{html.escape(str(alert['summary']))}\n\n"
+        link = str(alert.get("link", ""))
+        if link.startswith("https://"):
+            msg += f"🔗 {html.escape(link)}"
         sent = send_telegram(msg, token, chat)
-        if sent:
+        webhook_sent = send_webhook(msg, webhook_url, config.get("webhook_platform", "slack")) if webhook_url else False
+        if sent or webhook_sent:
             alerts_sent += 1
+            if not dry_run:
+                delivered_news.add(alert["id"])
+    state["seen_news"] = sorted(delivered_news)[-200:]
 
     if lockfile:
         stats["lockfile_vulns"] = len(vulns)
@@ -1071,8 +1104,13 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
             "ignored_keywords": sorted(ignored_keywords) if ignored_keywords else [],
         }
 
-    state["seen"] = list(seen)[-500:]
-    save_state(state)
+    if not dry_run:
+        state["seen"] = sorted(seen)[-500:]
+        state["last_successful_run"] = datetime.now(timezone.utc).isoformat()
+        state["last_scan_stats"] = stats
+        save_state(state)
+    else:
+        print("[DRY-RUN] No notifications delivered and no alert state was changed.")
     return alerts_sent
 
 
