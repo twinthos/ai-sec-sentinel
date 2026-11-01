@@ -47,7 +47,7 @@ class GuardianSecurityTests(unittest.TestCase):
             ledger.record("demo", "agent", {"marker": "original"})
             entry = json.loads(path.read_text())
             entry["data"]["marker"] = "modified"
-            path.write_text(json.dumps(entry) + "\\n")
+            path.write_text(json.dumps(entry) + "\n")
             with self.assertRaisesRegex(RuntimeError, "ledger verification failed"):
                 ProveLayer(str(path))
 

@@ -58,7 +58,7 @@ python3 -m unittest discover -s tests -v
 python3 ai_sec_sentinel.py --dry-run --since-hours 24
 ```
 
-The dry run previews alert formatting and queries live feeds. Network errors should produce a nonzero status rather than a misleading clean result.
+The dry run previews alert formatting and queries live feeds. The sample configuration disables optional RSS news monitoring until you explicitly set `news.enabled=true` in `sentinel_config.json`; it does not monitor X accounts or cloud infrastructure. Network errors should produce a nonzero status rather than a misleading clean result.
 
 ### Configure a live notification destination
 
@@ -73,6 +73,7 @@ export TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
 # export SENTINEL_WEBHOOK_URL="https://hooks.slack.com/services/..."
 # export SENTINEL_WEBHOOK_PLATFORM="slack"
 
+python3 ai_sec_sentinel.py --test-alert  # prove every configured channel acknowledges a test
 python3 ai_sec_sentinel.py --since-hours 24
 python3 ai_sec_sentinel.py --daemon --interval 60
 ```
