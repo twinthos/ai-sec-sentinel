@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from sentinel_guardian import ControlLayer, ProveLayer, SentinelGuardian
+from sentinel_guardian import ControlLayer, ProveLayer, SentinelGuardian, ObserveLayer
 
 
 class GuardianSecurityTests(unittest.TestCase):
@@ -42,13 +42,14 @@ class GuardianSecurityTests(unittest.TestCase):
 
     def test_unknown_agent_cannot_use_tools(self):
         with tempfile.TemporaryDirectory() as tmp:
-            with patch("sentinel_guardian.ObserveLayer", return_value=object()), patch("sentinel_guardian.ProveLayer", return_value=object()), patch("sentinel_guardian.ControlLayer", return_value=object()):
-                guardian = SentinelGuardian()
-                guardian.understand.register_agent("known", "Known", "owner", ["file_read"], [], [])
-                with self.assertRaises(PermissionError):
-                    guardian.process_tool_call("unknown", "file_read", {})
-                with self.assertRaises(PermissionError):
-                    guardian.process_tool_call("known", "shell_exec", {})
+            guardian = SentinelGuardian.__new__(SentinelGuardian)
+            from sentinel_guardian import UnderstandLayer
+            guardian.understand = UnderstandLayer()
+            guardian.understand.register_agent("known", "Known", "owner", ["file_read"], [], [])
+            with self.assertRaises(PermissionError):
+                guardian.process_tool_call("unknown", "file_read", {})
+            with self.assertRaises(PermissionError):
+                guardian.process_tool_call("known", "shell_exec", {})
 
     def test_ledger_does_not_store_raw_tool_params(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -56,10 +57,14 @@ class GuardianSecurityTests(unittest.TestCase):
             log_dir = Path(tmp) / "logs"
             policy = Path(tmp) / "policy.json"
             policy.write_text(json.dumps([{"tool": "file_read", "action": "allow", "condition": "always"}]))
-            with patch("sentinel_guardian.ObserveLayer", side_effect=lambda: __import__("sentinel_guardian").ObserveLayer(str(log_dir))), patch("sentinel_guardian.ProveLayer", side_effect=lambda: ProveLayer(str(ledger_file))), patch("sentinel_guardian.ControlLayer", side_effect=lambda: ControlLayer(str(policy))):
-                guardian = SentinelGuardian()
-                guardian.understand.register_agent("a", "A", "owner", ["file_read"], [], [])
-                guardian.process_tool_call("a", "file_read", {"token": "DO_NOT_LOG_THIS_VALUE"})
+            from sentinel_guardian import UnderstandLayer
+            guardian = SentinelGuardian.__new__(SentinelGuardian)
+            guardian.observe = ObserveLayer(str(log_dir))
+            guardian.prove = ProveLayer(str(ledger_file))
+            guardian.control = ControlLayer(str(policy))
+            guardian.understand = UnderstandLayer()
+            guardian.understand.register_agent("a", "A", "owner", ["file_read"], [], [])
+            guardian.process_tool_call("a", "file_read", {"token": "DO_NOT_LOG_THIS_VALUE"})
             self.assertNotIn("DO_NOT_LOG_THIS_VALUE", ledger_file.read_text())
             self.assertNotIn("DO_NOT_LOG_THIS_VALUE", next(log_dir.glob("*.jsonl")).read_text())
 
