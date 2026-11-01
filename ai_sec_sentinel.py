@@ -328,8 +328,7 @@ def fetch_feed(limit: int = 100) -> list[dict]:
     try:
         return _retry(_do)
     except Exception as e:
-        print(f"Feed fetch error: {e}")
-        return []
+        raise RuntimeError(f"Primary vulnerability feed unavailable: {type(e).__name__}") from e
 
 
 def fetch_entry(cve_id: str) -> dict | None:
@@ -359,8 +358,7 @@ def fetch_cisa_kev() -> dict:
     try:
         return _retry(_do)
     except Exception as e:
-        print(f"CISA KEV fetch error: {e}")
-        return {}
+        raise RuntimeError(f"CISA KEV source unavailable: {type(e).__name__}") from e
 
 
 def fetch_epss_scores(cve_ids: list[str]) -> dict:
@@ -373,6 +371,7 @@ def fetch_epss_scores(cve_ids: list[str]) -> dict:
             batch = cve_ids[i:i+100]
             query = ",".join(batch)
             r = requests.get(EPSS_API, params={"cves": query, "limit": 100}, timeout=30)
+            r.raise_for_status()
             if r.status_code == 200:
                 data = r.json()
                 rows = data.get("data", [])
@@ -383,7 +382,7 @@ def fetch_epss_scores(cve_ids: list[str]) -> dict:
                     if cve:
                         scores[cve] = float(item.get("epss", 0))
     except Exception as e:
-        print(f"EPSS fetch error: {e}")
+        raise RuntimeError(f"EPSS enrichment unavailable: {type(e).__name__}") from e
     return scores
 
 
@@ -1119,7 +1118,8 @@ def main():
     parser.add_argument("--version", action="version", version="Twinthos Sentinel v1.4.1")
     parser.add_argument("--lockfile", help="Path to lockfile")
     parser.add_argument("--ecosystem", choices=["python", "npm", "rust", "go", "ruby", "php", "dotnet"])
-    parser.add_argument("--check-only", action="store_true", help="Lockfile only, no feed watch")
+    parser.add_argument("--check-only", action="store_true", help="Check pinned AI dependencies; exits nonzero on findings or incomplete coverage")
+    parser.add_argument("--health", action="store_true", help="Check freshness of last successful real scan (no network I/O)")
     parser.add_argument("--feed-limit", type=int, default=100)
     parser.add_argument("--since-hours", type=int, default=24)
     parser.add_argument("--daemon", action="store_true", help="Continuous daemon mode")
@@ -1153,6 +1153,26 @@ def main():
     if args.ecosystem:
         config["ecosystem"] = args.ecosystem
 
+    # Health is distinct from a vulnerability scan or a process being alive.
+    if args.health:
+        from datetime import datetime as _dt, timezone as _tz
+        state = load_state()
+        stamp = state.get("last_successful_run")
+        if not stamp:
+            print("UNHEALTHY: no successful live scan recorded")
+            return 2
+        try:
+            age = (_dt.now(_tz.utc) - _dt.fromisoformat(stamp.replace("Z", "+00:00"))).total_seconds()
+            max_age = max(300, int(config.get("scan_interval_minutes", 60)) * 180)
+            if age < 0 or age > max_age:
+                print(f"UNHEALTHY: last live scan is {int(age)} seconds old")
+                return 2
+        except (TypeError, ValueError, OverflowError):
+            print("UNHEALTHY: invalid last successful scan timestamp")
+            return 2
+        print(f"HEALTHY: last successful live scan {int(age)} seconds ago")
+        return 0
+
     # Check-only mode: lockfile scan only, no feed watch
     if args.check_only:
         config = load_config()
@@ -1163,9 +1183,11 @@ def main():
         lockfile = config.get("lockfile")
         ecosystem = config.get("ecosystem", "python")
         if not lockfile:
-            # No lockfile = health check mode (for Docker healthcheck)
-            print("Sentinel OK — v1.4.1")
-            return
+            print("ERROR: --check-only requires --lockfile or a configured lockfile")
+            return 2
+        if not Path(lockfile).is_file():
+            print(f"ERROR: lockfile does not exist: {lockfile}")
+            return 2
         print(f"Checking lockfile: {lockfile} (ecosystem: {ecosystem})")
         vulns = check_lockfile(lockfile, ecosystem) if config.get("allow_lockfile_upload") else _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem)
         if vulns:
@@ -1177,7 +1199,7 @@ def main():
                     print(f"    Fix: {fix_cmd}")
         else:
             print("No confirmed vulnerabilities found in checked AI dependencies. Coverage may be incomplete.")
-        return
+        return 1 if vulns else 0
 
     # Stats mode
     if args.stats:
@@ -1347,7 +1369,10 @@ def main():
     chat = args.telegram_chat or config.get("telegram", {}).get("chat_id", "")
 
     if args.webhook_port:
-        secret = config.get("telegram", {}).get("webhook_secret", "")
+        secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
+        if len(secret) < 24:
+            print("ERROR: TELEGRAM_WEBHOOK_SECRET must be configured (>=24 characters)")
+            return 2
         print(f"Starting webhook server on port {args.webhook_port}...")
         _webhook_server(token, args.webhook_port, secret=secret)
         return
@@ -1366,12 +1391,17 @@ def main():
             try:
                 run_scan(config, token, chat)
             except Exception as e:
-                print(f"Scan error: {e}")
+                print(f"Scan error: {e}", file=sys.stderr)
             if not _shutdown["flag"]:
                 time.sleep(args.interval * 60)
         print("Daemon stopped gracefully.")
     else:
-        run_scan(config, token, chat)
+        try:
+            run_scan(config, token, chat)
+        except (OSError, RuntimeError, ValueError, KeyError) as e:
+            print(f"SCAN FAILED: {e}", file=sys.stderr)
+            return 2
+    return 0
 
 
 def _handle_callback_query(update: dict, token: str):
@@ -1423,4 +1453,4 @@ def _webhook_server(token: str, port: int = 8080, secret: str = ""):
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
