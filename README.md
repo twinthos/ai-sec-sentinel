@@ -1,131 +1,115 @@
 # Twinthos Sentinel
 
-**AI vulnerability monitoring with explicit delivery and failure reporting.**
+**A small, inspectable AI security project: threat monitoring + a scoped tool-execution demonstration.**
 
-Sentinel watches public vulnerability intelligence and selected RSS sources, filters AI-related findings, enriches CVEs with CISA KEV / FIRST EPSS, and sends alerts through Telegram or Slack/Discord webhooks. It also offers a limited pinned-dependency OSV check.
+[![CI](https://github.com/twinthos/ai-sec-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/twinthos/ai-sec-sentinel/actions/workflows/ci.yml)
+[Security policy](SECURITY.md) · [Threat model](docs/THREAT_MODEL.md) · [Engineering evidence](docs/EVIDENCE.md) · [Twinthos](https://twinthos.com/engineering/)
 
-**Status: release candidate, not independently production-certified.** Source code and automated tests are available for review. Do not rely on this alone to secure a company or AI agent.
+This repository focuses on two **different** tasks. The threat-intelligence scanner collects security information and sends notifications. The Guardian experiment evaluates proposed agent actions; a separate, **read-only reference adapter** proves a few specific tool restrictions can be enforced before a file is accessed.
 
-## What works and what doesn't
+**Maturity:** open-source reference / release candidate. Not independently audited, not certified, not a universal agent firewall or a substitute for runtime isolation.
 
-| Capability | Status | Boundary |
-| --- | --- | --- |
-| cve.now CVE feed + AI keyword filter | Implemented | Keyword matching is not proof a package is installed or exploitable |
-| CISA KEV / FIRST EPSS enrichment | Implemented | Upstream outages cause failures; EPSS is a prediction, not observed exploitation |
-| Telegram / Slack / Discord notifications | Implemented | Delivery requires credentials and an actual acknowledgement |
-| News RSS monitoring | Implemented | Selected feeds only; failed deliveries remain retryable |
-| OSV dependency scan | Limited | Supports exactly pinned AI dependencies in Python requirements, npm package-lock, and Go sums; not a full SCA/SBOM solution |
-| Persistent scan history, Docker health | Implemented | Health checks scan freshness, not security posture |
-| Guardian policy evaluation | **Experimental** | Cannot block agents with independent access to tools |
-| Agent passport, replay, MCP probes, compliance | **Demonstrations / partial** | No certification, runtime sandbox, independent proof ledger, or comprehensive protection |
+## See the security boundary work — one command
 
-A green unit-test badge proves test cases ran. It does not establish production safety, 24/7 availability, complete threat coverage, or exploit prevention.
+```sh
+python3 reference_adapter.py --demo
+```
 
-## Quick start: safe preview
+Expected on a compatible POSIX filesystem:
 
-Requires Python **3.11+**. Run these commands from the repository root:
+```text
+PASS: Scoped file read allowed.
+PASS: File deletion denied before execution; file unchanged.
+PASS: Evidence ledger verified; contents not logged.
+Scope: this read-only adapter only; NOT a universal agent firewall.
+```
 
-```bash
+The adapter deliberately supports **only** bounded UTF-8 file reads within an explicitly configured workspace. It has no shell, write or network API. It rejects unknown operations, parent-directory traversal and symlinks, treats `ask` as denied, and records a decision before returning file contents. It uses POSIX directory file descriptors and no-follow flags to avoid relying on string path checks alone.
+
+The reference adapter does **not** automatically protect Hermes, Orgo, MCP clients or any general AI agent. Those systems need a real integration with an unavoidable tool boundary and no alternate routes to the same privileges.
+
+Run the full offline test suite:
+
+```sh
+python3 -m unittest discover -s tests -v
+```
+
+The suite includes authorized/unauthorized calls, ledger integrity, sensitive-content redaction, symlink traversal, delivery retries and dry-run state. CI uses synthetic fixtures; it does not constitute independent penetration testing.
+
+## Threat monitor — what actually works
+
+- Pulls a primary CVE feed and enriches findings with CISA KEV and FIRST EPSS when those sources are available.
+- Filters by AI-related terms and optionally matches monitored suppliers. These are **heuristic relevance filters**, not guarantees of detection.
+- Optionally reviews specifically supported pinned AI dependency versions using OSV; unpinned packages and unsupported lockfile formats cannot be verified.
+- Sends notifications via Telegram or approved Slack/Discord webhook destinations, records acknowledged items, and retries notifications that failed.
+- Provides dry-run mode without sending alerts or changing deduplication state; checks the freshness of a successful live scan separately from whether the process is alive.
+
+Not supported: comprehensive SCA, full SBOM assurance, ransomware prevention, vulnerability remediation, live process isolation, all-platform threat coverage, guaranteed alert delivery or compliance certification.
+
+### Install / verify
+
+Requires Python 3.10+ and Internet access for live feed scans.
+
+```sh
 git clone https://github.com/twinthos/ai-sec-sentinel.git
 cd ai-sec-sentinel
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
+python3 -m unittest discover -s tests -v
 python3 ai_sec_sentinel.py --dry-run --since-hours 24
 ```
 
-Preview mode performs a feed scan **without sending notifications or changing alert deduplication state**. It is not a background monitor.
+The dry run previews alert formatting and queries live feeds. Network errors should produce a nonzero status rather than a misleading clean result.
 
-## Set up real alerts
+### Configure a live notification destination
 
-Choose **one** of these delivery routes:
+Use environment variables, not committed credentials.
 
-**Telegram:**
+```sh
+# Telegram
+export TELEGRAM_BOT_TOKEN="YOUR_TOKEN"
+export TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
 
-```bash
-export TELEGRAM_BOT_TOKEN="your-private-bot-token"
-export TELEGRAM_CHAT_ID="your-chat-id"
-```
+# Or use an approved Slack/Discord webhook
+# export SENTINEL_WEBHOOK_URL="https://hooks.slack.com/services/..."
+# export SENTINEL_WEBHOOK_PLATFORM="slack"
 
-**Slack:**
-
-```bash
-export SENTINEL_WEBHOOK_PLATFORM="slack"
-export SENTINEL_WEBHOOK_URL="https://hooks.slack.com/services/your-private-webhook"
-```
-
-**Discord:** set `SENTINEL_WEBHOOK_PLATFORM=discord` and use a `https://discord.com/api/webhooks/...` URL.
-
-Never commit credentials or send them in issues, screenshots or agent prompts.
-
-Verify the real notification path:
-
-```bash
-python3 ai_sec_sentinel.py --test-alert
-```
-
-**Only continue once the alert appears in the intended channel.** The command exits with code 2 on missing or failed configured destinations. A receiver HTTP acknowledgement does not prove a human saw the message.
-
-Then run a live scan:
-
-```bash
 python3 ai_sec_sentinel.py --since-hours 24
-python3 ai_sec_sentinel.py --health
-```
-
-Continuous operation:
-
-```bash
 python3 ai_sec_sentinel.py --daemon --interval 60
 ```
 
-If an upstream source is unavailable, a live scan fails visibly and does not update `last_successful_run`. A daemon may retry on the next interval; its health check turns unhealthy when successful scans become stale. No alerts are delivered unless a relevant finding occurs.
+Without a delivery destination, live monitoring fails visibly. Set up monitoring of nonzero exits and the health check; a running daemon alone is not evidence of functioning alerts.
 
-## Check an AI dependency lockfile
+### Local lockfile check
 
-```bash
-python3 ai_sec_sentinel.py --check-only --lockfile ./requirements.txt --ecosystem python
+```sh
+python3 ai_sec_sentinel.py --check-only --lockfile requirements.txt --ecosystem python
 ```
 
-This sends *package names and exact versions* to OSV. It does not upload the whole lockfile under the default configuration.
+A reported finding exits nonzero, as does incomplete strict coverage. Only supported, exactly pinned dependency versions are assessed. A lack of findings does **not** assert that an entire application has no vulnerabilities. For complete dependency auditing use a dedicated, maintained SCA tool.
 
-Exit codes: **0** = no reported vulnerabilities in the packages it could check; **1** = reported vulnerabilities; **2** = invalid input, unsupported parser, unpinned AI package, OSV failure or incomplete coverage.
+### Operations and deployment
 
-Only exactly pinned AI dependencies are in scope. Other dependencies, different ecosystems, non-AI packages, optional dependencies, installed runtime differences and unknown packages may be unassessed. This tool is **not** a substitute for comprehensive SCA tools.
-
-## Containers
-
-Build locally and provide credentials through your container/orchestrator secret management:
-
-```bash
-docker compose build
-docker compose up -d
-docker compose ps
+```sh
+python3 ai_sec_sentinel.py --health
+docker compose up --build -d
 ```
 
-The Compose deployment uses a persistent named Docker volume at `/data` with `SENTINEL_DATA_DIR=/data`. Protect and back up the volume; do not commit runtime data. A missing notification destination prevents useful live monitoring. The Kubernetes manifest is an **example**, with a deliberately invalid image placeholder until you supply a tested image pinned by digest. It does not run Guardian or the dashboard.
+The Docker image runs as a non-root user and stores runtime data in the `/data` volume. Configure a notification destination before starting a live service. The health command checks freshness of the last successful live scan; it is not a guarantee that every alert was received.
 
-## State, logs and access
+The optional `guardian_gate.py` API and `dashboard.py` are **separate processes**, loopback-only by default, and require their own secrets. Guardian registration requires a distinct admin key. Do not expose either service directly to the Internet.
 
-- Runtime data includes `sentinel_state.json`, `sentinel_feedback.json`, and optional Guardian logs/ledger. Mount `SENTINEL_DATA_DIR` on persistent, restricted storage.
-- The dashboard is optional, **read-only**, local-only by default, and requires `DASHBOARD_API_KEY` (24+ characters). It has no remote scan-trigger endpoint.
-- Guardian Gate is a **policy evaluation API**, not an interception layer. It requires `GUARDIAN_API_KEY` for evaluations and a separate `GUARDIAN_ADMIN_API_KEY` for registration; both should be strong and never reused. An agent with direct access to shells, network or connectors can bypass the evaluator.
-- A Guardian hash chain detects some local file modifications but is not signed or independently anchored. Protect evidence externally before treating it as audit-grade proof.
-- The repo does not remediate dependencies, prove the absence of prompt injection, run live agent penetration tests, or certify legal compliance.
+## What the project does not prove
 
-## Tests and evidence
+**An allow/deny API response is not enforcement.** The model may still be able to reach tools by another path. `reference_adapter.py` shows what enforcement looks like for one deliberately limited capability; it does not secure an unrestricted runtime.
 
-```bash
-python3 -m unittest discover -s tests -v
-python3 -m compileall -q .
-```
+The evidence ledger verifies local record hashes and chaining, but an administrator with write access could replace the full history. There is no independent log anchoring, signing or immutable store.
 
-GitHub CI covers deterministic fixtures, policy/ledger behavior and alert-delivery state with mocked integrations. **CI does not hold your Telegram or webhook credentials, and it cannot prove real live delivery**. Run `--test-alert` yourself after configuring channels.
+Permission scopes, response accuracy and company-specific applicability must be verified before production. See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for protected assets, assumptions, bypasses and remaining work.
 
-Coverage limitations: only a bounded, recent CVE feed window is scanned; keyword matching and news sentiment are heuristic; unsupported packages and unavailable feeds cannot be reported as clean; overlapping daemon instances may interfere with local state and should not share the same data directory.
+## Technical review / contributing
 
-## Vulnerability reporting
+Start at [docs/EVIDENCE.md](docs/EVIDENCE.md) for the proof checklist, then inspect [reference_adapter.py](reference_adapter.py), [tests/test_reference_adapter.py](tests/test_reference_adapter.py), [ai_sec_sentinel.py](ai_sec_sentinel.py) and [tests/test_runtime_safety.py](tests/test_runtime_safety.py).
 
-Please use [GitHub private security advisories](https://github.com/twinthos/ai-sec-sentinel/security/advisories/new), not a public issue. See [SECURITY.md](SECURITY.md). License: MIT.
+Reproduce the tests; review the negative cases; open an issue with a minimal sanitized reproduction. Report security vulnerabilities **privately** using [GitHub Security Advisories](https://github.com/twinthos/ai-sec-sentinel/security/advisories/new). Never post tokens, private logs or credentials in issues.
 
-Maintained by [Twinthos](https://twinthos.com). No affiliation with source feed vendors.
+Licensed under [MIT](LICENSE). The project is maintained by Twinthos; there is no implied endorsement by OWASP, GitHub or external security vendors.
