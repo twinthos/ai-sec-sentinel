@@ -22,8 +22,8 @@ from enum import Enum
 class ObserveLayer:
     """Monitor tool calls, MCP changes, agent behavior, vulnerabilities."""
 
-    def __init__(self, log_dir: str = "guardian_logs"):
-        self.log_dir = Path(log_dir)
+    def __init__(self, log_dir: str = None):
+        self.log_dir = Path(log_dir) if log_dir else Path(os.getenv("SENTINEL_DATA_DIR", ".")) / "guardian_logs"
         self.log_dir.mkdir(exist_ok=True)
         self.events = []
 
@@ -450,8 +450,12 @@ class ControlLayer:
 class ProveLayer:
     """Evidence ledger — tamper-evident audit trail."""
 
-    def __init__(self, ledger_file: str = "guardian_ledger.jsonl"):
-        self.ledger_file = Path(ledger_file)
+    def __init__(self, ledger_file: str = None):
+        self.ledger_file = Path(ledger_file) if ledger_file else Path(os.getenv("SENTINEL_DATA_DIR", ".")) / "guardian_ledger.jsonl"
+        self.ledger_file.parent.mkdir(parents=True, exist_ok=True)
+        integrity = self.verify_integrity()
+        if integrity.get("status") not in ("empty", "intact"):
+            raise RuntimeError(f"Guardian ledger verification failed: {integrity.get('status')}")
         self.previous_hash = self._get_last_hash()
 
     def _get_last_hash(self) -> str:
@@ -477,20 +481,23 @@ class ProveLayer:
         # Compute hash
         entry_str = json.dumps(entry, sort_keys=True)
         entry["hash"] = hashlib.sha256(entry_str.encode()).hexdigest()
-        self.previous_hash = entry["hash"]
-
-        # Append to ledger
-        with open(self.ledger_file, "a") as f:
+        # Record before advancing the in-memory chain; durable-write errors
+        # must fail the policy evaluation rather than returning a receipt.
+        with open(self.ledger_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
-
+            f.flush()
+            os.fsync(f.fileno())
+        self.previous_hash = entry["hash"]
         return entry
 
     def verify_integrity(self) -> dict:
         """Verify the ledger hasn't been tampered with."""
         if not self.ledger_file.exists():
             return {"status": "empty", "entries": 0}
-
-        lines = self.ledger_file.read_text().strip().split("\n")
+        raw = self.ledger_file.read_text().strip()
+        if not raw:
+            return {"status": "empty", "entries": 0}
+        lines = raw.split("\n")
         entries = []
         for line in lines:
             try:
