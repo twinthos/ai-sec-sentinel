@@ -125,7 +125,10 @@ class RuntimeSafetyTests(unittest.TestCase):
              patch.object(news_scanner, "_load_state", return_value={"seen_news": []}), \
              patch.object(news_scanner, "_save_state") as save, \
              patch.object(news_scanner.requests, "get", return_value=response), \
+             patch.object(news_scanner.requests, "get") as http_get, \
              patch.object(news_scanner.feedparser, "parse", return_value=feed):
+            http_get.return_value.status_code = 200
+            http_get.return_value.iter_content.return_value = [b"<rss/>"]
             alerts = news_scanner.scan_news()
             self.assertEqual(len(alerts), 1)
             save.assert_not_called()
