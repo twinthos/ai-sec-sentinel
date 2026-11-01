@@ -873,7 +873,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
                     msg += f"  → Fix: <code>{html.escape(fix_cmd)}</code>\n"
             send_telegram(msg, token, chat)
         else:
-            send_telegram(f"✅ Lockfile clean: {Path(lockfile).name}", token, chat)
+            send_telegram(f"ℹ️ No confirmed vulnerabilities in checked AI dependencies: {Path(lockfile).name}. Unpinned packages, unsupported formats and failed queries may be unassessed.", token, chat)
 
     # Feed watch
     print("Scanning cve.now feed...")
@@ -941,12 +941,13 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         epss = epss_scores.get(raw_id)
         in_kev = raw_id in kev_ids
         msg = format_alert(entry, epss_score=epss, in_kev=in_kev, cvss=cvss)
-        sent = send_telegram(msg, token, chat, cve_id=raw_id)
-        # Also send to webhook if configured
+        telegram_sent = send_telegram(msg, token, chat, cve_id=raw_id)
+        # A successful webhook counts as delivery even when Telegram is off.
         webhook_url = config.get("webhook_url", "")
+        webhook_sent = False
         if webhook_url:
-            send_webhook(msg, webhook_url, config.get("webhook_platform", "slack"))
-        if sent:
+            webhook_sent = send_webhook(msg, webhook_url, config.get("webhook_platform", "slack"))
+        if telegram_sent or webhook_sent:
             seen.add(raw_id)
             alerts_sent += 1
         else:
@@ -1137,7 +1138,7 @@ def main():
                 if fix_cmd:
                     print(f"    Fix: {fix_cmd}")
         else:
-            print("No AI-related vulnerabilities found.")
+            print("No confirmed vulnerabilities found in checked AI dependencies. Coverage may be incomplete.")
         return
 
     # Stats mode
