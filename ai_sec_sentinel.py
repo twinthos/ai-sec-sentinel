@@ -1394,7 +1394,7 @@ def main():
     chat = args.telegram_chat or config.get("telegram", {}).get("chat_id", "")
 
     if args.test_alert:
-        if args.dry_run:
+        if args.dry_run or os.getenv("SENTINEL_DRY_RUN") == "1":
             print("ERROR: --test-alert must send a real message; remove --dry-run")
             return 2
         destinations = []
