@@ -504,19 +504,37 @@ def _osv_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
                     osv_vulns = osv_data.get("vulns", [])
                     for v in osv_vulns:
                         affected = v.get("affected", [])
+                        is_affected = True
+                        for a in affected:
+                            # Check if installed version is in affected range
+                            events = a.get("ranges", [{}])[0].get("events", [])
+                            introduced = None
+                            fixed = None
+                            for ev in events:
+                                if ev.get("type") == "introduced":
+                                    introduced = ev.get("introduced")
+                                if ev.get("type") == "fixed":
+                                    fixed = ev.get("fixed")
+                            # Simple version comparison
+                            if version and fixed and version >= fixed:
+                                is_affected = False
+                                break
+                        if not is_affected:
+                            continue
+                        fixed_ver = None
                         for a in affected:
                             events = a.get("ranges", [{}])[0].get("events", [])
-                            fixed_ver = None
                             for ev in events:
                                 if ev.get("type") == "fixed":
                                     fixed_ver = ev.get("fixed")
-                            vulns.append({
-                                "id": v.get("id", pkg),
-                                "summary": f"OSV: {pkg} has known vulns. Fixed in {fixed_ver or 'unknown'}.",
-                                "severity": {"cvss": None},
-                                "fixed_version": fixed_ver,
-                                "source": "osv",
-                            })
+                        vulns.append({
+                            "id": v.get("id", pkg),
+                            "summary": f"OSV: {pkg} (v{version or 'unknown'}) has known vulns. Fixed in {fixed_ver or 'unknown'}.",
+                            "severity": {"cvss": None},
+                            "fixed_version": fixed_ver,
+                            "source": "osv",
+                            "affected": True,
+                        })
                     if not osv_vulns:
                         vulns.append({
                             "id": pkg,
@@ -750,11 +768,26 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
 
     print(f"  {stats['feed_fetched']} fetched, {stats['new_entries']} new, {stats['ai_related']} AI-related, {alerts_sent} alerts sent, {stats['cisa_kev_hits']} CISA KEV, {stats['high_epss']} high-EPSS")
 
-    # Adaptive: if user consistently ignores certain keywords, lower their weight
+    # Adaptive: learn from feedback — track which CVE patterns are useful vs ignored
     if config.get("learn_from_actions"):
+        useful = [cid for cid, data in feedback.items() if data.get("action") == "useful"]
         ignored = [cid for cid, data in feedback.items() if data.get("action") == "ignored"]
         if len(ignored) > 5:
-            print(f"  Adaptive: {len(ignored)} CVEs marked ignored — consider adjusting keywords")
+            print(f"  Adaptive: {len(ignored)} CVEs marked ignored, {len(useful)} marked useful")
+            # Extract common keywords from ignored CVEs to reduce their weight
+            ignored_keywords = set()
+            for cid in ignored:
+                for kw in AI_KEYWORDS:
+                    if kw in cid.lower():
+                        ignored_keywords.add(kw)
+            if ignored_keywords:
+                print(f"  Consider reducing weight for: {', '.join(sorted(ignored_keywords))}")
+        # Save learned preferences to state
+        state["learned"] = {
+            "useful_count": len(useful),
+            "ignored_count": len(ignored),
+            "ignored_keywords": sorted(ignored_keywords) if ignored_keywords else [],
+        }
 
     state["seen"] = list(seen)[-500:]
     save_state(state)

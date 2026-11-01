@@ -31,9 +31,19 @@ This repository is the **reference implementation** of Twinthos Sentinel — the
 - **CISA KEV + FIRST EPSS** — cross-references every alert against known exploited vulnerabilities and exploit prediction scores
 - **Lockfile-aware** — scans your actual `requirements.txt` / `package-lock.json` / `go.sum` against threat feeds
 - **Continuous daemon** — runs 24/7, scans every N minutes, self-heals on errors
-- **Feedback learning** — mark alerts as `ignored` or `useful`; the monitor adapts
+- **Feedback learning** — mark alerts as `ignored` or `useful`; the monitor tracks patterns and suggests keyword adjustments
 - **Telegram/Discord/webhook** — formatted alerts with CVSS, EPSS, CISA KEV flag, fix version
 - **Deduplication** — remembers alerted threats across runs; never spam you twice
+
+## What this does NOT do
+
+- **Does not remediate.** Fix commands are suggestions, not automated patches. You apply them manually.
+- **Does not test agents.** Canary prompts are manual test strings, not automated agent security tests.
+- **Does not certify compliance.** Compliance mapping is indicative — verify with your compliance team.
+- **Does not replace Wiz/Snyk/Dependabot.** It is a complementary AI-specific threat intelligence layer.
+- **Does not monitor agent behavior in real time.** It scans CVE feeds and news on a schedule, not live agent execution.
+- **Risk scoring is heuristic.** Based on severity, CISA KEV, and EPSS. Not an authoritative risk assessment.
+- **Discord/webhook alerts** are planned, not yet implemented. Telegram works now.
 
 ## 30-second install
 
