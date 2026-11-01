@@ -2,6 +2,15 @@
 
 Continuous threat intelligence for organisations running AI agents and automation.
 
+## Alert channels
+
+| Channel | Cost | Setup |
+|---------|------|-------|
+| Telegram | Free | @BotFather token + chat ID |
+| Slack | Free | Webhook URL |
+| Discord | Free | Webhook URL |
+| iMessage (Sendblue) | Paid (~$20/mo) | Sendblue API key + secret + recipient number |
+
 ## What it does (working features)
 
 - **CVE monitoring**: Fetches NVD, CISA KEV, and GitHub Security Advisories. Filters to your stack via keyword matching.

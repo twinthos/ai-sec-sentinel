@@ -357,5 +357,19 @@
     "detect_cloud_credentials": true,
     "detect_ssrf_to_metadata": true,
     "detect_container_escape": true
+  },
+  "notification_channels": [
+    "telegram"
+  ],
+  "imessage": {
+    "enabled": false,
+    "provider": "sendblue",
+    "to_number": "",
+    "from_number": "",
+    "env_vars": [
+      "SENDBLUE_API_KEY",
+      "SENDBLUE_API_SECRET"
+    ],
+    "note": "Requires Sendblue account (paid). See sendblue.com"
   }
 }
