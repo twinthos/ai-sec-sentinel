@@ -1,173 +1,117 @@
 #!/usr/bin/env python3
-"""Twinthos Sentinel — Web Dashboard.
+"""Read-only local dashboard for Sentinel scan state.
 
-Stdlib-only HTTP server. No external dependencies.
-Run: python3 dashboard.py
-Open: http://localhost:8080
+Never offers a scan-triggering HTTP endpoint. Use the CLI to run scans.
+Do not expose this stdlib HTTP server directly to the Internet.
 """
-
+import hmac
+import html
 import json
 import os
-import subprocess
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-STATE_FILE = Path("sentinel_state.json")
-CONFIG_FILE = Path("sentinel_config.json")
-FEEDBACK_FILE = Path("sentinel_feedback.json")
+DATA_DIR = Path(os.getenv("SENTINEL_DATA_DIR", Path(__file__).parent))
+STATE_FILE = DATA_DIR / "sentinel_state.json"
+CONFIG_FILE = Path(__file__).with_name("sentinel_config.json")
+FEEDBACK_FILE = DATA_DIR / "sentinel_feedback.json"
+API_KEY = os.getenv("DASHBOARD_API_KEY", "")
+HOST = os.getenv("DASHBOARD_HOST", "127.0.0.1")
+PORT = int(os.getenv("PORT", "8080"))
 
 
 def load_json(path):
-    if path.exists():
+    try:
+        result = json.loads(path.read_text(encoding="utf-8"))
+        return result if isinstance(result, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def get_status():
+    state, config = load_json(STATE_FILE), load_json(CONFIG_FILE)
+    stamp = state.get("last_successful_run")
+    age = None
+    if isinstance(stamp, str):
         try:
-            return json.loads(path.read_text())
-        except Exception:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(stamp.replace("Z", "+00:00"))).total_seconds()
+        except (ValueError, TypeError):
             pass
-    return {}
+    max_age = max(300, int(config.get("scan_interval_minutes", 60)) * 180)
+    healthy = age is not None and 0 <= age <= max_age
+    return {
+        "status": "healthy" if healthy else "degraded",
+        "version": str(config.get("version", "unknown")),
+        "last_successful_scan": stamp,
+        "age_seconds": int(age) if age is not None else None,
+        "seen_threats": len(state.get("seen", [])),
+        "seen_news": len(state.get("seen_news", [])),
+        "last_scan_stats": state.get("last_scan_stats", {}),
+    }
 
 
 def render_dashboard():
-    state = load_json(STATE_FILE)
-    config = load_json(CONFIG_FILE)
-    feedback = load_json(FEEDBACK_FILE)
+    data = get_status()
+    esc = lambda x: html.escape(str(x), quote=True)
+    status = esc(data["status"])
+    stats = data.get("last_scan_stats", {})
+    rows = "".join(
+        f"<tr><th>{esc(key)}</th><td>{esc(value)}</td></tr>"
+        for key, value in sorted(stats.items()) if isinstance(value, (str, int, float, bool))
+    ) if isinstance(stats, dict) else ""
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Twinthos Sentinel — Local status</title>
+<style>
+:root{{color-scheme:dark}}body{{font:16px system-ui,sans-serif;background:#111;color:#eee;max-width:780px;margin:auto;padding:3rem 1.5rem;line-height:1.6}}
+h1{{font-size:2rem}}p,small{{color:#aaa}}.panel{{background:#1b1b1b;border:1px solid #444;border-radius:10px;padding:1.5rem;margin:1rem 0}}
+table{{width:100%;border-collapse:collapse}}th,td{{text-align:left;padding:.6rem;border-bottom:1px solid #444;word-break:break-word}}
+a{{color:#ddd}}
+</style></head><body>
+<h1>Twinthos Sentinel</h1>
+<p>Read-only status. This page does not run scans or prove end-to-end alert delivery.</p>
+<div class="panel"><strong>Status: {status}</strong>
+<p>Last completed live scan: {esc(data["last_successful_scan"] or "Never")}</p>
+<p>Tracked CVEs: {esc(data["seen_threats"])} · Tracked news: {esc(data["seen_news"])}</p></div>
+<div class="panel"><h2>Last scan</h2><table>{rows or "<tr><td>No scan statistics yet</td></tr>"}</table></div>
+<small>v{esc(data["version"])} · API: /api/status · CLI: python3 ai_sec_sentinel.py --health</small>
+</body></html>"""
 
-    seen_count = len(state.get("seen", []))
-    risk_history = state.get("risk_history", [])
-    last_run = state.get("last_run", "Never")
-    ignored = sum(1 for v in feedback.values() if v.get("action") == "ignored")
-    useful = sum(1 for v in feedback.values() if v.get("action") == "useful")
-
-    risk_rows = "".join(
-        f"<tr><td>{r.get('timestamp', '?')[:19]}</td><td>{r.get('score', '?')}/100</td><td>{r.get('level', '?')}</td></tr>"
-        for r in risk_history[-10:]
-    ) or "<tr><td colspan='3'>No risk history yet. Run a scan with --risk-report.</td></tr>"
-
-    return f"""<!DOCTYPE html>
-<html>
-<head>
-    <title>Twinthos Sentinel Dashboard</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body {{ font-family: system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0; margin: 0; padding: 20px; }}
-        .card {{ background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 20px; margin: 10px 0; }}
-        .metric {{ display: inline-block; margin: 10px 20px; text-align: center; }}
-        .metric .value {{ font-size: 2em; font-weight: bold; color: #00ff88; }}
-        .metric .label {{ font-size: 0.8em; color: #888; }}
-        h1 {{ color: #00ff88; margin: 0; }}
-        h2 {{ color: #ccc; border-bottom: 1px solid #333; padding-bottom: 8px; }}
-        table {{ width: 100%; border-collapse: collapse; }}
-        td, th {{ padding: 8px; text-align: left; border-bottom: 1px solid #222; }}
-        a {{ color: #00ff88; }}
-        .badge {{ padding: 2px 8px; border-radius: 4px; font-size: 0.8em; }}
-        .badge.ok {{ background: #003322; color: #00ff88; }}
-        .badge.warn {{ background: #332200; color: #ffaa00; }}
-    </style>
-</head>
-<body>
-    <h1>Twinthos Sentinel</h1>
-    <p>Continuous threat intelligence for organizations &mdash; v{config.get('version', 'unknown')}</p>
-
-    <div class="card">
-        <h2>Status</h2>
-        <div class="metric"><div class="value">{seen_count}</div><div class="label">Threats Seen</div></div>
-        <div class="metric"><div class="value">{useful}</div><div class="label">Marked Useful</div></div>
-        <div class="metric"><div class="value">{ignored}</div><div class="label">Marked Ignored</div></div>
-        <div class="metric"><div class="value">{last_run[:19] if last_run != 'Never' else 'Never'}</div><div class="label">Last Run</div></div>
-    </div>
-
-    <div class="card">
-        <h2>Configuration</h2>
-        <p>Alert min severity: {config.get('alert_min_severity', 1)}</p>
-        <p>Lockfile upload: {'Enabled' if config.get('allow_lockfile_upload') else 'Disabled (consent required)'}</p>
-        <p>Auto-remediate: {'Enabled' if config.get('auto_remediate') else 'Disabled'}</p>
-        <p>Webhook: {'Configured' if config.get('webhook_url') else 'Not configured'}</p>
-    </div>
-
-    <div class="card">
-        <h2>Risk History</h2>
-        <table>
-            <tr><th>Time</th><th>Score</th><th>Level</th></tr>
-            {risk_rows}
-        </table>
-    </div>
-
-    <div class="card">
-        <h2>Quick Actions</h2>
-        <p><a href="/api/scan">Run Scan (dry)</a> | <a href="/api/status">API Status</a></p>
-    </div>
-</body>
-</html>"""
-
-
-DASHBOARD_API_KEY = os.getenv("DASHBOARD_API_KEY", "")
 
 class Handler(BaseHTTPRequestHandler):
-    def _check_auth(self):
-        if not DASHBOARD_API_KEY:
-            return True  # No key configured = open (dev mode)
-        auth = self.headers.get("Authorization", "")
-        if auth == f"Bearer {DASHBOARD_API_KEY}":
-            return True
-        # Also check query param for browser access
-        from urllib.parse import parse_qs
-        qs = parse_qs(urlparse(self.path).query)
-        if qs.get("key", [""])[0] == DASHBOARD_API_KEY:
-            return True
-        return False
+    def _respond(self, status, payload, content_type):
+        data = payload.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(data)
 
     def do_GET(self):
-        path = urlparse(self.path).path
-        if path not in ("/",) and not self._check_auth():
-            self.send_response(401)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(b'{"error": "Unauthorized. Set DASHBOARD_API_KEY or pass ?key=YOUR_KEY"}')
+        expected = "Bearer " + API_KEY
+        provided = self.headers.get("Authorization", "")
+        if not API_KEY or not hmac.compare_digest(provided, expected):
+            self._respond(401, '{"error":"Unauthorized"}', "application/json")
             return
-        if path == "/":
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html")
-            self.end_headers()
-            self.wfile.write(render_dashboard().encode())
-        elif path == "/api/status":
-            state = load_json(STATE_FILE)
-            config = load_json(CONFIG_FILE)
-            import json as _j
-            data = _j.dumps({
-                "status": "ok",
-                "version": config.get("version", "unknown"),
-                "threats_seen": len(state.get("seen", [])),
-                "last_run": state.get("last_run"),
-            })
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(data.encode())
-        elif path == "/api/scan":
-            result = subprocess.run(
-                ["python3", "ai_sec_sentinel.py", "--dry-run", "--since-hours", "24", "--feed-limit", "20"],
-                capture_output=True, text=True, timeout=120,
-            )
-            import json as _j
-            data = _j.dumps({
-                "exit_code": result.returncode,
-                "output": result.stdout[-2000:],
-            })
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(data.encode())
+        path = urlparse(self.path).path
+        if path == "/api/status":
+            self._respond(200, json.dumps(get_status()), "application/json")
+        elif path == "/":
+            self._respond(200, render_dashboard(), "text/html; charset=utf-8")
         else:
-            self.send_response(404)
-            self.end_headers()
+            self._respond(404, '{"error":"Not found"}', "application/json")
 
-    def log_message(self, format, *args):
-        pass  # Suppress request logging
+    def log_message(self, *args):
+        pass
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "8080"))
-    server = HTTPServer(("0.0.0.0", port), Handler)
-    print(f"Dashboard running on http://0.0.0.0:{port}")
+    if len(API_KEY) < 24:
+        raise SystemExit("DASHBOARD_API_KEY must be configured (at least 24 characters)")
+    server = HTTPServer((HOST, PORT), Handler)
+    print(f"Read-only dashboard listening on {HOST}:{PORT}")
     server.serve_forever()
