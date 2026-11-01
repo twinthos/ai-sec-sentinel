@@ -117,15 +117,47 @@ class RuntimeSafetyTests(unittest.TestCase):
         import news_scanner
         feed = Mock()
         feed.entries = [{"title": "LangChain breach", "summary": "attack", "link": "https://example.invalid/news"}]
+        response = Mock(status_code=200)
+        response.iter_content.return_value = [b"<rss/>"]
         with patch.object(news_scanner, "_load_config", return_value={"news": {
             "keywords": ["LangChain"], "sources": ["https://example.invalid/rss"]
         }}), \
              patch.object(news_scanner, "_load_state", return_value={"seen_news": []}), \
              patch.object(news_scanner, "_save_state") as save, \
+             patch.object(news_scanner.requests, "get", return_value=response), \
              patch.object(news_scanner.feedparser, "parse", return_value=feed):
             alerts = news_scanner.scan_news()
             self.assertEqual(len(alerts), 1)
             save.assert_not_called()
+
+    def test_test_alert_returns_failure_if_destination_declines(self):
+        with patch("sys.argv", ["sentinel", "--test-alert"]), \
+             patch.dict(os.environ, {"SENTINEL_DRY_RUN": "0"}), \
+             patch.object(sentinel, "load_config", return_value={"webhook_url": "https://hooks.slack.com/services/T/B/C"}), \
+             patch.object(sentinel, "send_webhook", return_value=False):
+            self.assertEqual(sentinel.main(), 2)
+
+    def test_test_alert_requires_real_send_not_inherited_preview(self):
+        with patch("sys.argv", ["sentinel", "--test-alert"]), \
+             patch.dict(os.environ, {"SENTINEL_DRY_RUN": "1"}), \
+             patch.object(sentinel, "load_config", return_value={"webhook_url": "https://hooks.slack.com/services/T/B/C"}), \
+             patch.object(sentinel, "send_webhook") as webhook:
+            self.assertEqual(sentinel.main(), 2)
+            webhook.assert_not_called()
+
+    def test_test_alert_success_needs_acknowledgement(self):
+        with patch("sys.argv", ["sentinel", "--test-alert"]), \
+             patch.dict(os.environ, {"SENTINEL_DRY_RUN": "0"}), \
+             patch.object(sentinel, "load_config", return_value={"webhook_url": "https://hooks.slack.com/services/T/B/C"}), \
+             patch.object(sentinel, "send_webhook", return_value=True) as webhook:
+            self.assertEqual(sentinel.main(), 0)
+            webhook.assert_called_once()
+
+    def test_docker_compose_does_not_override_executable(self):
+        compose = Path("docker-compose.yml").read_text()
+        self.assertNotIn("command:", compose)
+        self.assertIn("sentinel-data:/data", compose)
+        self.assertIn("--health", compose)
 
     def test_dashboard_requires_bearer_and_disallows_scan_trigger(self):
         from dashboard import Handler
