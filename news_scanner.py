@@ -80,8 +80,8 @@ def _is_negative_sentiment(text: str) -> bool:
 
 def scan_news(max_items: int = 50) -> list[dict]:
     """Scan configured RSS/news sources for threats matching YOUR keywords."""
-    if feedparser is None:
-        raise RuntimeError("News monitoring requires feedparser; install requirements.txt")
+    if feedparser is None or requests is None:
+        raise RuntimeError("News monitoring requires feedparser and requests; install requirements.txt")
 
     config = _load_config()
     news_config = config.get("news", {})
@@ -95,11 +95,28 @@ def scan_news(max_items: int = 50) -> list[dict]:
     failed = 0
     for source in sources:
         try:
-            feed = feedparser.parse(source)
-            status = getattr(feed, "status", 200)
-            if isinstance(status, int) and status >= 400:
-                raise RuntimeError(f"RSS source returned HTTP {status}")
+            from urllib.parse import urlparse
+            parsed = urlparse(source)
+            if parsed.scheme != "https" or not parsed.hostname:
+                raise RuntimeError("RSS source must be an HTTPS URL")
+            # No cross-host redirects. Fetch with explicit timeouts and a body limit.
+            response = requests.get(source, timeout=(5, 15), stream=True, allow_redirects=False)
+            try:
+                if response.status_code != 200:
+                    raise RuntimeError(f"RSS source returned HTTP {response.status_code}")
+                parts = []
+                total = 0
+                for chunk in response.iter_content(chunk_size=65536):
+                    total += len(chunk)
+                    if total > 2 * 1024 * 1024:
+                        raise RuntimeError("RSS feed exceeds 2 MiB")
+                    parts.append(chunk)
+                feed = feedparser.parse(b"".join(parts))
+            finally:
+                response.close()
             entries = feed.entries
+            if getattr(feed, "bozo", False) and not entries:
+                raise RuntimeError("RSS feed could not be parsed")
             succeeded += 1
         except Exception as error:
             failed += 1
