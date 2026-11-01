@@ -61,8 +61,8 @@ python3 ai_sec_sentinel.py --lockfile requirements.txt --ecosystem python
 
 **Give feedback:**
 ```bash
-python3 ai_sec_sentinel.py --feedback CVE-2026-63377 useful
-python3 ai_sec_sentinel.py --feedback CVE-2026-119712 ignored
+python3 ai_sec_sentinel.py --feedback CVE-2025-EXAMPLE useful
+python3 ai_sec_sentinel.py --feedback CVE-2025-EXAMPLE ignored
 ```
 
 ## How it works

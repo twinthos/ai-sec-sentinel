@@ -16,7 +16,7 @@ Usage:
   python3 ai_sec_sentinel.py --daemon                # continuous mode
   python3 ai_sec_sentinel.py --lockfile requirements.txt --ecosystem python
   python3 ai_sec_sentinel.py --check-only
-  python3 ai_sec_sentinel.py --feedback CVE-2026-119712 ignored
+  python3 ai_sec_sentinel.py --feedback CVE-2025-EXAMPLE ignored
 """
 
 import argparse
@@ -682,7 +682,7 @@ def main():
     parser.add_argument("--daemon", action="store_true", help="Continuous daemon mode")
     parser.add_argument("--interval", type=int, default=60, help="Scan interval in minutes (daemon mode)")
     parser.add_argument("--stats", action="store_true", help="Show scan statistics and exit")
-    parser.add_argument("--feedback", nargs="+", help="Mark CVE as ignored or useful, e.g. --feedback CVE-2026-119712 ignored")
+    parser.add_argument("--feedback", nargs="+", help="Mark CVE as ignored or useful, e.g. --feedback CVE-2025-EXAMPLE ignored")
     parser.add_argument("--telegram-token", default=os.getenv("TELEGRAM_BOT_TOKEN", ""))
     parser.add_argument("--telegram-chat", default=os.getenv("TELEGRAM_CHAT_ID", ""))
     parser.add_argument("--webhook-port", type=int, default=0, help="Start webhook server for Telegram callback buttons")
