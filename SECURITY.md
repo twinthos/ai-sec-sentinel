@@ -1,45 +1,37 @@
 # Security Policy
 
-## Supported Versions
+## Status
 
-| Version | Supported |
-|---------|-----------|
-| 1.2.x   | Yes       |
-| < 1.2   | No        |
+The current default branch is an open-source **release candidate**. There is no
+independent security certification, uptime guarantee, or production support SLA.
 
-## Reporting a Vulnerability
+Guardian's policy evaluation is not an enforced sandbox unless a separately
+controlled runtime makes it an unavoidable boundary. Do not treat this project
+as a complete AI security product.
 
-If you discover a security vulnerability in Twinthos Sentinel, please report it responsibly:
+## Reporting vulnerabilities
 
-1. **Do NOT open a public issue.** Use GitHub Security Advisories instead.
-2. Go to [Security Advisories](https://github.com/twinthos/ai-sec-sentinel/security/advisories/new)
-3. Include:
-   - Description of the vulnerability
-   - Steps to reproduce
-   - Affected version(s)
-   - Potential impact
+Do **not** disclose exploits, credentials, tokens or personal data in a public
+GitHub issue. Use private GitHub Security Advisories:
 
-## Response Timeline
+https://github.com/twinthos/ai-sec-sentinel/security/advisories/new
 
-- **Acknowledgement:** Within 48 hours
-- **Initial assessment:** Within 7 days
-- **Fix or mitigation:** Within 30 days for critical/high, 90 days for medium/low
+Please include affected code version, minimal reproduction instructions, impact,
+and safe redacted logs. We welcome coordinated disclosure, but have not
+committed to guaranteed response or remediation deadlines.
 
-## Scope
+## Security model
 
-This policy covers the Twinthos Sentinel codebase. It does NOT cover:
-- The managed Twinthos service at twinthos.com
-- Third-party dependencies (report to their maintainers)
-- Social engineering or physical attacks
+- All live alert channels must be explicitly configured and tested.
+- `--dry-run` never sends alerts or mutates alert-deduplication state.
+- A failed source fetch causes a nonzero one-shot result.
+- Guardian evaluation and dashboard HTTP APIs require authentication and bind
+  to loopback by default; place them behind a separate authenticated,
+  TLS-terminating gateway if access beyond localhost is needed.
+- Guardian logs should not contain raw tool parameters. Runtime state must be
+  stored in restricted persistent storage.
+- The local ledger is a hash chain, **not** immutable or externally anchored.
+- CI uses synthetic fixtures and cannot certify live integrations or compliance.
 
-## Security Design
-
-- All state writes are atomic (temp + rename)
-- Webhook server binds to 127.0.0.1 only
-- HTML output is escaped
-- No credentials are stored in the repository
-- Environment variables are used for secrets
-
-## Contact
-
-For security inquiries: security@twinthos.com
+Scope: this GitHub repository only, not the commercial Twinthos service or
+third-party software. See README.md for what this project does and does not do.
