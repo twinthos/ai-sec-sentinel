@@ -943,7 +943,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
             from news_scanner import scan_news
             news_alerts = scan_news()
         except Exception as e:
-            print(f"News scan error: {e}")
+            raise RuntimeError(f"Configured news monitoring failed: {e}") from e
 
     # Collect CVE IDs for EPSS batch lookup
     cve_ids = []
@@ -1006,11 +1006,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
 
     # Run Layer 2 plugins if available
     plugin_findings = []
-    try:
-        from plugins.canary_prompts import run_canary_tests
-        plugin_findings.extend(run_canary_tests())
-    except Exception:
-        pass
+    # Manual canary prompt examples are NOT automated security findings.
     try:
         from plugins.mcp_drift import scan_mcp_drift
         mcp_path = config.get("mcp_config_path")
@@ -1358,7 +1354,7 @@ def main():
         print(f"  Generated: {path}")
         print()
         print("=" * 60)
-        print("  Demo complete. All systems operational.")
+        print("  DEMO COMPLETE. This does not establish production security or agent enforcement.")
         print("=" * 60)
         sys.exit(0)
 
@@ -1385,6 +1381,7 @@ def main():
         g.register_agent(args.passport, args.passport, "owner",
                          ["file_read", "http_request"], ["read_files"], ["internal_docs"])
         p = g.understand.get_passport(args.passport)
+        print("  DEMO PASSPORT ONLY — not an existing registered agent")
         print(f"  Agent: {p['name']}")
         print(f"  Tools: {p['tools']}")
         print(f"  Data access: {p['data_access']}")
