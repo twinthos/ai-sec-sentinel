@@ -765,7 +765,7 @@ def check_sbom(lockfile_path: str) -> str:
     import os
     if not os.path.exists(lockfile_path):
         return "Lockfile not found"
-    lines = [f"# SBOM", f"# Source: {lockfile_path}", f"# Generated: {datetime.now(timezone.utc).isoformat()}", ""]
+    lines = [f"# Dependency inventory (NOT SPDX/CycloneDX SBOM)", f"# Source: {lockfile_path}", f"# Generated: {datetime.now(timezone.utc).isoformat()}", ""]
     with open(lockfile_path) as f:
         for line in f:
             line = line.strip()
@@ -1150,13 +1150,13 @@ def main():
     parser.add_argument("--telegram-chat", default=os.getenv("TELEGRAM_CHAT_ID", ""))
     parser.add_argument("--webhook-port", type=int, default=0, help="Start webhook server for Telegram callback buttons")
     parser.add_argument("--dry-run", action="store_true", help="Print alerts to stdout without sending")
-    parser.add_argument("--digest", action="store_true", help="Send a single digest summary instead of individual alerts")
+    parser.add_argument("--digest", action="store_true", help="Send an additional digest after individual alerts")
     parser.add_argument("--risk-report", action="store_true", help="Print risk score and compliance report")
-    parser.add_argument("--sbom", metavar="LOCKFILE", help="Generate SBOM from lockfile")
+    parser.add_argument("--sbom", metavar="LOCKFILE", help="Print a dependency inventory (not SPDX or CycloneDX)")
     parser.add_argument("--check-extensions", action="store_true", help="Check VS Code/Cursor extensions for known malicious versions")
     parser.add_argument("--brand-check", metavar="BRAND", help="Check for typosquatting/impersonation domains")
     parser.add_argument("--agent-posture", action="store_true", help="Audit AI agent security posture (MCP configs, tool permissions)")
-    parser.add_argument("--compliance-report", action="store_true", help="Generate compliance report PDF")
+    parser.add_argument("--compliance-report", action="store_true", help="Generate a DEMO PDF using synthetic findings, not a real compliance audit")
     parser.add_argument("--demo", action="store_true", help="Run all checks in sequence (demo mode)")
     parser.add_argument("--guardian", action="store_true", help="Run Sentinel Guardian demo (agent security control plane)")
     parser.add_argument("--passport", metavar="AGENT_ID", help="Show agent passport (blast radius, permissions)")
