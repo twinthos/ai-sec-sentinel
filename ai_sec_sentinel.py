@@ -129,6 +129,11 @@ def load_config() -> dict:
                 config["allow_lockfile_upload"] = False
             if not isinstance(config.get("auto_remediate"), bool):
                 config["auto_remediate"] = False
+            # Optional environment-based sink configuration for containers.
+            if os.getenv("SENTINEL_WEBHOOK_URL"):
+                config["webhook_url"] = os.environ["SENTINEL_WEBHOOK_URL"]
+            if os.getenv("SENTINEL_WEBHOOK_PLATFORM"):
+                config["webhook_platform"] = os.environ["SENTINEL_WEBHOOK_PLATFORM"]
             return config
         except Exception:
             pass
@@ -482,6 +487,16 @@ def send_webhook(message: str, webhook_url: str, platform: str = "slack") -> boo
         parsed = urlparse(webhook_url)
         if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
             print("Webhook URL must be HTTPS without embedded credentials")
+            return False
+        allowed_hosts = {
+            "slack": {"hooks.slack.com", "hooks.slack-gov.com"},
+            "discord": {"discord.com", "discordapp.com"},
+        }
+        if parsed.hostname not in allowed_hosts.get(platform, set()):
+            print("Webhook host not allowed for configured platform")
+            return False
+        if platform == "discord" and not parsed.path.startswith("/api/webhooks/"):
+            print("Discord webhook path invalid")
             return False
         import re as _re
         clean = _re.sub(r'<[^>]+>', '', message)
@@ -1391,6 +1406,10 @@ def main():
         print(f"Starting webhook server on port {args.webhook_port}...")
         _webhook_server(token, args.webhook_port, secret=secret)
         return
+
+    if not args.dry_run and not ((token and chat) or config.get("webhook_url")):
+        print("ERROR: configure TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID or SENTINEL_WEBHOOK_URL, or use --dry-run", file=sys.stderr)
+        return 2
 
     if args.daemon:
         # Graceful shutdown handler
