@@ -463,6 +463,9 @@ def format_alert(entry: dict, epss_score: float | None = None, in_kev: bool = Fa
 
 def send_webhook(message: str, webhook_url: str, platform: str = "slack") -> bool:
     """Send alert to Slack or Discord webhook."""
+    if os.getenv("SENTINEL_DRY_RUN") == "1":
+        print(f"[DRY-RUN webhook] {message[:500]}")
+        return True
     if not webhook_url:
         return False
     try:
@@ -482,14 +485,14 @@ def send_webhook(message: str, webhook_url: str, platform: str = "slack") -> boo
 
 
 def send_telegram(message: str, token: str, chat_id: str, cve_id: str = "") -> bool:
+    # Dry-run must never send, even when credentials are configured.
+    if os.getenv("SENTINEL_DRY_RUN") == "1":
+        print(f"[DRY-RUN] {message[:500]}")
+        return True
     if not token or not chat_id:
         print("[TELEGRAM NOT CONFIGURED]")
         print(message[:800])
         return False
-    # Dry-run mode: print to stdout instead of sending
-    if os.getenv("SENTINEL_DRY_RUN") == "1":
-        print(f"[DRY-RUN] {message[:500]}")
-        return True
 
     # Rate limiting: small delay between sends
     time.sleep(0.5)
@@ -785,29 +788,20 @@ def _osv_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
                     osv_vulns = osv_data.get("vulns", [])
                     for v in osv_vulns:
                         affected = v.get("affected", [])
-                        is_affected = True
-                        for a in affected:
-                            # Check if installed version is in affected range
-                            events = a.get("ranges", [{}])[0].get("events", [])
-                            introduced = None
-                            fixed = None
-                            for ev in events:
-                                if ev.get("type") == "introduced":
-                                    introduced = ev.get("introduced")
-                                if ev.get("type") == "fixed":
-                                    fixed = ev.get("fixed")
-                            # Simple version comparison
-                            if version and fixed and version >= fixed:
-                                is_affected = False
-                                break
-                        if not is_affected:
-                            continue
+                        # OSV already filters by version when the query includes one.
+                        # Do not apply lexical version comparisons, which can hide
+                        # real vulnerabilities (for example 1.9 versus 1.10).
                         fixed_ver = None
                         for a in affected:
-                            events = a.get("ranges", [{}])[0].get("events", [])
-                            for ev in events:
-                                if ev.get("type") == "fixed":
-                                    fixed_ver = ev.get("fixed")
+                            for affected_range in a.get("ranges", []):
+                                for event in affected_range.get("events", []):
+                                    if "fixed" in event:
+                                        fixed_ver = event["fixed"]
+                                        break
+                                if fixed_ver:
+                                    break
+                            if fixed_ver:
+                                break
                         vulns.append({
                             "id": v.get("id", pkg),
                             "summary": f"OSV: {pkg} (v{version or 'unknown'}) has known vulns. Fixed in {fixed_ver or 'unknown'}.",
@@ -1075,7 +1069,8 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         }
 
     state["seen"] = list(seen)[-500:]
-    save_state(state)
+    if os.getenv("SENTINEL_DRY_RUN") != "1":
+        save_state(state)
     return alerts_sent
 
 
@@ -1308,8 +1303,8 @@ def main():
         print(f"  Transitive reach: {p['transitive_reach']}")
         sys.exit(0)
 
-    token = args.telegram_token or config.get("telegram", {}).get("token", "")
-    chat = args.telegram_chat or config.get("telegram", {}).get("chat_id", "")
+    token = args.telegram_token or os.getenv("TELEGRAM_BOT_TOKEN", "") or config.get("telegram", {}).get("token", "")
+    chat = args.telegram_chat or os.getenv("TELEGRAM_CHAT_ID", "") or config.get("telegram", {}).get("chat_id", "")
 
     if args.webhook_port:
         secret = config.get("telegram", {}).get("webhook_secret", "")

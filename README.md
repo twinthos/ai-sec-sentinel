@@ -4,7 +4,7 @@
 
 A self-driving monitor that scrapes, filters, and alerts on threats that could actually harm your company — AI threats today, brand threats tomorrow. Runs wherever your infrastructure runs.
 
-![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Status](https://img.shields.io/badge/status-autonomous-success)
 
 ---
@@ -22,6 +22,9 @@ This repository is the **reference implementation** of Twinthos Sentinel — the
 - Generic threat feeds are 90% noise. You get alerts about WordPress plugins while your AI stack, supply chain, or brand reputation is under attack.
 - CISA KEV tells you what's actively exploited — but not what matters to YOUR stack, YOUR suppliers, or YOUR market.
 - By the time you hear about an AI agent escape, a supply-chain compromise, or a brand-threatening leak on social media, it's already in the wild.
+
+
+> **Prototype limitations:** This project is not a complete dependency scanner or a production security control. The current OSV path checks only selected AI-related dependencies, does not fully parse all advertised lockfile formats, and sends package names and versions to OSV.dev. A scan with no findings is not proof that a system is secure. Guardian is a demonstration and does not enforce permissions unless independently integrated at a trusted execution boundary.
 
 ## What it does
 

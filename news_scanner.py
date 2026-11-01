@@ -10,6 +10,7 @@ Filters to YOUR keywords and alerts in real-time.
 """
 
 import json
+import os
 import re
 import urllib.parse
 from datetime import datetime, timezone
@@ -131,5 +132,6 @@ def scan_news(max_items: int = 50) -> list[dict]:
     # Restore main module state
     state["seen"] = _main_seen
     state["last_run"] = _main_last_run
-    _save_state(state)
+    if os.getenv("SENTINEL_DRY_RUN") != "1":
+        _save_state(state)
     return alerts

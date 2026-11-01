@@ -24,4 +24,4 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python3 ai_sec_sentinel.py --since-hours 24 --feed-limit 100
       - name: Run tests
-        run: python3 -m unittest tests.test_sentinel_core -v
+        run: python3 -m unittest discover -s tests -v
