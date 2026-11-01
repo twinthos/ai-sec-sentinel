@@ -1,21 +1,23 @@
-version: "3.9"
-
 services:
   sentinel:
     build: .
-    image: twinthos/ai-sec-sentinel:latest
-    container_name: ai-sec-sentinel
+    image: twinthos/ai-sec-sentinel:local
     restart: unless-stopped
+    init: true
     volumes:
-      - ./data:/data
+      - sentinel-data:/data
     environment:
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - SENTINEL_DATA_DIR=/data
-    command: ["--daemon", "--interval", "60"]
+      SENTINEL_DATA_DIR: /data
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      SENTINEL_WEBHOOK_URL: ${SENTINEL_WEBHOOK_URL:-}
+      SENTINEL_WEBHOOK_PLATFORM: ${SENTINEL_WEBHOOK_PLATFORM:-slack}
     healthcheck:
       test: ["CMD", "python3", "/app/ai_sec_sentinel.py", "--health"]
       interval: 5m
       timeout: 15s
       retries: 3
       start_period: 5m
+
+volumes:
+  sentinel-data:
