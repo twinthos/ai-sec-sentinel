@@ -2,41 +2,36 @@
 
 **Continuous threat intelligence for organizations.**
 
-A self-driving monitor that scrapes, filters, and alerts on threats that could actually harm your company — AI threats today, brand threats tomorrow. No API keys. No login. No cloud dependency. Runs wherever your infrastructure runs.
+A self-driving monitor that scrapes, filters, and alerts on threats that could actually harm your company — AI threats today, brand threats tomorrow. Runs wherever your infrastructure runs.
 
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-![CISA KEV](https://img.shields.io/badge/CISA_KEV-enabled-red)
-![EPSS](https://img.shields.io/badge/EPSS-enabled-orange)
 ![Status](https://img.shields.io/badge/status-autonomous-success)
 
-**Live metrics (31 Oct 2026 scan):** 100 feeds fetched, 3 AI-related CVEs, 0 CISA KEV hits, 0 high-EPSS, 0 lockfile vulns. Zero false positives in first production run.
+---
 
-```
-$ python3 ai_sec_sentinel.py --daemon --interval 60
-[STATS] Feed fetched: 100 | New: 100 | AI-related: 3 | CISA KEV: 0 | High EPSS: 0
-[DEMO] Run python3 ai_sec_sentinel.py --stats for live metrics
-```
+## What this is
 
-> **Demo:** Run `python3 ai_sec_sentinel.py --since-hours 72 --feed-limit 50` for a live 90-second scan.
+This repository is the **reference implementation** of Twinthos Sentinel — the same engine that powers the managed Twinthos digital employee. It runs on your infrastructure, scans your dependencies, and sends alerts to your team channel.
+
+**This is NOT the Twinthos managed service.** The managed service at [twinthos.com](https://twinthos.com) includes hosted operation, 24/7 monitoring, and dedicated support. This repo lets you run the core scanner yourself.
+
+---
 
 ## The problem
 
-- Generic threat feeds are 90% noise for any organization. You get alerts about WordPress plugins while your AI stack, supply chain, or brand reputation is under attack.
+- Generic threat feeds are 90% noise. You get alerts about WordPress plugins while your AI stack, supply chain, or brand reputation is under attack.
 - CISA KEV tells you what's actively exploited — but not what matters to YOUR stack, YOUR suppliers, or YOUR market.
-- Existing tools are cloud SaaS, pentesting suites, or static scanners. None run continuously, learn from your feedback, and adapt to new threat vectors.
-- By the time you hear about an AI agent escape, a supply-chain compromise, or a brand-threatening leak on Twitter, it's already in the wild.
+- By the time you hear about an AI agent escape, a supply-chain compromise, or a brand-threatening leak on social media, it's already in the wild.
 
-## What this does
+## What it does
 
 - **Threat-intelligence scraper** — continuously pulls CVE feeds, CISA KEV, exploit databases, and news sources
 - **Organization-aware filter** — only alerts on threats that match YOUR stack, YOUR suppliers, and YOUR industry
-- **AI-first, not AI-only** — AI/agent/MCP threats are the current focus because that's where the active exploitation is, but the monitor is built to track any threat vector
+- **AI-first, not AI-only** — AI/agent/MCP threats are the current focus because that's where the active exploitation is
 - **CISA KEV + FIRST EPSS** — cross-references every alert against known exploited vulnerabilities and exploit prediction scores
 - **Lockfile-aware** — scans your actual `requirements.txt` / `package-lock.json` / `go.sum` against threat feeds
 - **Continuous daemon** — runs 24/7, scans every N minutes, self-heals on errors
 - **Feedback learning** — mark alerts as `ignored` or `useful`; the monitor adapts
-- **Auto-remediation hooks** — extension points for patch branches, PR automation, quarantine
 - **Telegram/Discord/webhook** — formatted alerts with CVSS, EPSS, CISA KEV flag, fix version
 - **Deduplication** — remembers alerted threats across runs; never spam you twice
 
@@ -92,6 +87,7 @@ python3 ai_sec_sentinel.py --feedback CVE-2026-119712 ignored
 ## Configuration
 
 `sentinel_config.json` controls everything:
+
 ```json
 {
   "scan_interval_minutes": 60,
@@ -118,25 +114,14 @@ python3 ai_sec_sentinel.py --feedback CVE-2026-119712 ignored
 | Lockfile only | `python3 ai_sec_sentinel.py --lockfile requirements.txt --ecosystem python --check-only` | Dependency audit |
 | Cron | `bash install_cron.sh` | Hourly scheduled |
 
-## Auto-remediation hooks
-
-Set `auto_remediate: true` in config. The sentinel exposes hooks for:
-- Creating patch branches
-- Opening PRs with version bumps
-- Quarantining vulnerable dependencies
-- Notifying team channels
-
 ## Competition
 
 | Tool | Type | AI-only filter | CISA KEV | EPSS | Lockfile | Daemon | Feedback | Local |
 |------|------|---------------|----------|------|----------|--------|----------|-------|
 | **This** | Monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | cve.now | Feed + MCP | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ |
-| NVIDIA SkillSpector | Static scanner | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Lakera Guard | Cloud SaaS | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
 | Protect AI | Cloud SaaS | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
-| Vigil LLM | Prompt injection | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| AiSOC | SIEM | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ |
 
 **What others miss:** generic CVEs drown out AI signals; no one combines CISA KEV + EPSS + lockfile + feedback learning + news/supplier monitoring in a continuous daemon.
 

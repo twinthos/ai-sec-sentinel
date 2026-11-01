@@ -81,9 +81,16 @@ def load_state() -> dict:
     return {"seen": [], "last_run": None, "feedback": {}}
 
 
+def atomic_write(path, data):
+    """Write file atomically via temp + rename."""
+    import tempfile, os
+    tmp = path.parent / (path.name + ".tmp")
+    tmp.write_text(data, encoding="utf-8")
+    tmp.replace(path)
+
 def save_state(state: dict):
     state["last_run"] = datetime.now(timezone.utc).isoformat()
-    STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    atomic_write(STATE_FILE, json.dumps(state, indent=2))
 
 
 def load_feedback() -> dict:
@@ -99,8 +106,57 @@ def load_feedback() -> dict:
 def record_feedback(cve_id: str, action: str):
     fb = load_feedback()
     fb[cve_id] = {"action": action, "ts": datetime.now(timezone.utc).isoformat()}
-    FEEDBACK_FILE.write_text(json.dumps(fb, indent=2), encoding="utf-8")
+    atomic_write(FEEDBACK_FILE, json.dumps(fb, indent=2))
 
+
+def _word_boundary(text: str, kw: str) -> bool:
+    """Match keyword as a whole word, not a substring."""
+    pattern = r"\b" + re.escape(kw) + r"\b"
+    return re.search(pattern, text, re.IGNORECASE) is not None
+
+# Synonym map: common alternate spellings / product names
+AI_SYNONYMS = {
+    "langchain": ["lang chain", "langchain"],
+    "llamaindex": ["llama index", "llamaindex"],
+    "openai": ["open ai", "openai"],
+    "anthropic": ["anthropic"],
+    "claude": ["claude"],
+    "gpt": ["gpt"],
+    "mcp": ["model context protocol", "mcp"],
+    "agent": ["agent", "agents"],
+    "copilot": ["copilot"],
+    "cursor": ["cursor"],
+    "codex": ["codex"],
+    "claude code": ["claude code"],
+    "aider": ["aider"],
+    "continue": ["continue"],
+    "prompt injection": ["prompt injection", "prompt injection attack"],
+    "rag": ["rag", "retrieval augmented generation"],
+    "retrieval augmented": ["rag", "retrieval augmented generation"],
+    "embedding": ["embedding", "embeddings"],
+    "vllm": ["vllm"],
+    "ollama": ["ollama"],
+    "litellm": ["litellm"],
+    "transformers": ["transformers"],
+    "huggingface": ["hugging face", "huggingface"],
+    "autogen": ["autogen"],
+    "crewai": ["crewai"],
+    "semantic kernel": ["semantic kernel"],
+    "langgraph": ["langgraph"],
+    "ai agent": ["ai agent", "ai agents"],
+    "coding agent": ["coding agent"],
+    "llm framework": ["llm framework"],
+    "llm sdk": ["llm sdk"],
+    "ai security": ["ai security"],
+    "adversarial": ["adversarial"],
+    "jailbreak": ["jailbreak"],
+}
+
+def _matches_synonyms(blob_lower: str, kw: str) -> bool:
+    for syn in AI_SYNONYMS.get(kw.lower(), [kw]):
+        if _word_boundary(blob_lower, syn):
+            return True
+    return False
 
 def is_ai_related(entry: dict) -> bool:
     blob = (
@@ -110,15 +166,13 @@ def is_ai_related(entry: dict) -> bool:
         + " "
         + entry.get("summary", "")
     ).lower()
-    # Tier 1: direct AI/agent/MCP keyword hit
-    if any(kw in blob for kw in AI_KEYWORDS):
+    # Tier 1: direct AI/agent/MCP keyword hit with word boundaries + synonyms
+    if any(_matches_synonyms(blob, kw) for kw in AI_KEYWORDS):
         return True
     # Tier 2: AI infrastructure keyword hit, but only if an AI keyword
-    # is also present in the same entry. This catches cases like
-    # "ClickHouse RCE in AI analytics pipeline" without flagging
-    # every generic database CVE.
-    if any(kw in blob for kw in AI_INFRA_KEYWORDS):
-        return any(kw in blob for kw in AI_KEYWORDS)
+    # is also present in the same entry.
+    if any(_word_boundary(blob, kw) for kw in AI_INFRA_KEYWORDS):
+        return any(_matches_synonyms(blob, kw) for kw in AI_KEYWORDS)
     return False
 
 
@@ -144,12 +198,12 @@ def severity_rank(entry: dict) -> int:
             return 1
         return 0
 
-    blob = (entry.get("title", "") + " " + entry.get("content_text", "")).lower()
-    if any(x in blob for x in ["critical", "cvss 9", "cvss 10", "9.8", "10.0"]):
+    severity_text = ((severity.get("label") or severity.get("name") or "")).upper()
+    if severity_text == "CRITICAL":
         return 3
-    if any(x in blob for x in ["high", "cvss 7", "cvss 8", "7.5", "8.8"]):
+    if severity_text == "HIGH":
         return 2
-    if any(x in blob for x in ["medium", "cvss 5", "cvss 6"]):
+    if severity_text == "MEDIUM":
         return 1
     return 0
 
@@ -200,10 +254,13 @@ def fetch_epss_scores(cve_ids: list[str]) -> dict:
         for i in range(0, len(cve_ids), 100):
             batch = cve_ids[i:i+100]
             query = ",".join(batch)
-            r = requests.get(EPSS_API, params={"query": query, "limit": 100}, timeout=30)
+            r = requests.get(EPSS_API, params={"cves": query, "limit": 100}, timeout=30)
             if r.status_code == 200:
                 data = r.json()
-                for item in data.get("data", []):
+                rows = data.get("data", [])
+                if not rows:
+                    print("Warning: EPSS returned 0 rows — check endpoint/params")
+                for item in rows:
                     cve = item.get("cve")
                     if cve:
                         scores[cve] = float(item.get("epss", 0))
@@ -229,7 +286,7 @@ def filter_new(entries: list[dict], since: datetime) -> list[dict]:
 
 def extract_fix_version(entry: dict) -> str | None:
     text = entry.get("content_text", "") + " " + (entry.get("summary") or "")
-    m = re.search(r"(?:fixed in|upgrade to|patched in|version)[:\s]+([\w\.\-]+)", text, re.IGNORECASE)
+    m = re.search(r"(?:fixed in|upgrade to|patched in|version)[:\s]+(\d+[\.\w-]*)", text, re.IGNORECASE)
     return m.group(1) if m else None
 
 
@@ -243,7 +300,7 @@ def format_alert(entry: dict, epss_score: float | None = None, in_kev: bool = Fa
     sev_emoji = {3: "🔴", 2: "🟠", 1: "🟡"}.get(sev, "⚪")
     sev_label = {3: "CRITICAL", 2: "HIGH", 1: "MEDIUM", 0: "LOW"}.get(sev, "UNKNOWN")
 
-    clean_title = title.split("#")[0].strip()
+    clean_title = __import__("html").escape(title.split("#")[0].strip())
     msg = f"{sev_emoji} <b>AI Security Alert — {sev_label}</b>\n\n"
     msg += f"<b>{cve_id}</b>\n"
     msg += f"{clean_title[:220]}\n\n"
@@ -351,11 +408,48 @@ def _offline_lockfile_check(path: Path, content: str, ecosystem: str) -> list[di
         if not pkg:
             continue
         if any(kw in pkg.lower() for kw in ["langchain", "openai", "anthropic", "claude", "gpt", "mcp", "agent", "crewai", "langgraph", "llamaindex", "huggingface", "transformers", "ollama", "vllm", "litellm", "semantic"]):
-            vulns.append({
-                "id": pkg,
-                "summary": f"Offline check: {pkg} is an AI-related dependency. Verify latest version manually.",
-                "severity": {"cvss": None},
-            })
+            # Try OSV.dev for real version data
+            try:
+                osv_url = "https://api.osv.dev/v1/query"
+                osv_payload = {"package": {"name": pkg}}
+                osv_r = requests.post(osv_url, json=osv_payload, timeout=15)
+                if osv_r.status_code == 200:
+                    osv_data = osv_r.json()
+                    osv_vulns = osv_data.get("vulns", [])
+                    for v in osv_vulns:
+                        affected = v.get("affected", [])
+                        for a in affected:
+                            events = a.get("ranges", [{}])[0].get("events", [])
+                            fixed_ver = None
+                            for ev in events:
+                                if ev.get("type") == "fixed":
+                                    fixed_ver = ev.get("fixed")
+                            vulns.append({
+                                "id": v.get("id", pkg),
+                                "summary": f"OSV: {pkg} has known vulns. Fixed in {fixed_ver or 'unknown'}.",
+                                "severity": {"cvss": None},
+                                "fixed_version": fixed_ver,
+                                "source": "osv",
+                            })
+                    if not osv_vulns:
+                        vulns.append({
+                            "id": pkg,
+                            "summary": f"OSV: {pkg} — no known vulns found.",
+                            "severity": {"cvss": None},
+                            "source": "osv",
+                        })
+                else:
+                    vulns.append({
+                        "id": pkg,
+                        "summary": f"Offline check: {pkg} is an AI-related dependency. OSV.dev returned {osv_r.status_code}. Verify latest version manually.",
+                        "severity": {"cvss": None},
+                    })
+            except Exception:
+                vulns.append({
+                    "id": pkg,
+                    "summary": f"Offline check: {pkg} is an AI-related dependency. OSV.dev unreachable. Verify latest version manually.",
+                    "severity": {"cvss": None},
+                })
     return vulns
 
 
@@ -453,6 +547,10 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         seen.add(raw_id)
         alerts_sent += 1
         if alerts_sent >= 5:
+            for e in ai_entries:
+                raw_id = e.get("id", "").split("#")[0].strip()
+                if raw_id and raw_id not in seen:
+                    seen.add(raw_id)
             break
 
     stats = {
@@ -490,9 +588,9 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         alerts_sent += 1
 
     if lockfile:
-        stats["lockfile_vulns"] = len(vulns) if 'vulns' in dir() else 0
+        stats["lockfile_vulns"] = len(vulns) if vulns is not None else 0
 
-    print(f"  {stats["feed_fetched"]} fetched, {stats["new_entries"]} new, {stats["ai_related"]} AI-related, {alerts_sent} alerts sent, {stats["cisa_kev_hits"]} CISA KEV, {stats["high_epss"]} high-EPSS")
+    print(f"  {stats['feed_fetched']} fetched, {stats['new_entries']} new, {stats['ai_related']} AI-related, {alerts_sent} alerts sent, {stats['cisa_kev_hits']} CISA KEV, {stats['high_epss']} high-EPSS")
 
     # Adaptive: if user consistently ignores certain keywords, lower their weight
     if config.get("learn_from_actions"):
@@ -625,8 +723,8 @@ def _webhook_server(token: str, port: int = 8080):
                 self.send_response(500)
                 self.end_headers()
 
-    server = HTTPServer(("0.0.0.0", port), Handler)
-    print(f"Webhook server listening on :{port}")
+    server = HTTPServer(("127.0.0.1", port), Handler)
+    print(f"Webhook server listening on 127.0.0.1:{port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

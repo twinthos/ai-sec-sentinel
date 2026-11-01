@@ -51,7 +51,7 @@ def _load_state():
 def _save_state(state: dict):
     state["last_news_run"] = datetime.now(timezone.utc).isoformat()
     state_path = Path(__file__).with_name("sentinel_state.json")
-    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    atomic_write(state_path, json.dumps(state, indent=2))
 
 def _matches_keywords(entry_text: str, keywords: list[str]) -> bool:
     text = entry_text.lower()
