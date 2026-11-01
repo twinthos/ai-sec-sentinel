@@ -83,6 +83,13 @@ AI_INFRA_KEYWORDS = [
     "clickhouse", "postgres", "mysql", "qdrant", "pinecone", "weaviate",
     "redis", "elasticsearch", "opensearch", "vector database",
     "mlflow", "kubeflow", "ray", "jupyter", "vllm",
+    "brotli", "node.js", "nodejs", "openssl", "zlib", "compression",
+    "vscode extension", "cursor extension", "marketplace", "trojan",
+    "backdoor", "ssh key", "authorized_keys", "fake", "trojanized",
+    "impersonat", "phishing", "typosquat", "chatgpt desktop",
+    "claude desktop", "fake app", "agentic", "offensive agent",
+    "agent escape", "tool poisoning", "tool abuse", "privilege escalation",
+    "sandbox escape", "sandbox bypass", "browser escape",
 ]
 
 
@@ -497,6 +504,150 @@ def check_lockfile(lockfile_path: str, ecosystem: str) -> list[dict]:
     return _osv_lockfile_check(path, content, ecosystem)
 
 
+def check_extension_integrity(extensions_dir: str = None) -> list:
+    """Check VS Code/Cursor extensions for known malicious versions."""
+    import os
+    results = []
+    if extensions_dir is None:
+        extensions_dir = os.path.expanduser("~/.vscode/extensions")
+    if not os.path.exists(extensions_dir):
+        return results
+    known_bad = {
+        "anthropic.claude-code": ["2.1.313"],
+    }
+    try:
+        for entry in os.listdir(extensions_dir):
+            for pkg, bad_versions in known_bad.items():
+                if pkg in entry:
+                    parts = entry.split("-")
+                    version = parts[-1] if len(parts) >= 2 else "unknown"
+                    if version in bad_versions:
+                        results.append({"extension": pkg, "version": version, "status": "MALICIOUS", "action": "UNINSTALL IMMEDIATELY"})
+                    else:
+                        results.append({"extension": pkg, "version": version, "status": "OK"})
+    except Exception as e:
+        results.append({"error": str(e)})
+    return results
+
+
+def check_brand_protection(brand: str = "twinthos") -> list:
+    """Check for typosquatting/impersonation domains for a brand."""
+    import socket
+    results = []
+    # Common typosquatting patterns
+    variants = [
+        brand.replace("o", "0"), brand.replace("i", "1"), brand.replace("l", "1"),
+        brand + "app", brand + "ai", "get" + brand, brand + "hq",
+        brand.replace("th", "t"), brand + "-app", brand + "security",
+    ]
+    variants = list(set(variants))
+    for variant in variants:
+        domain = f"{variant}.com"
+        try:
+            socket.gethostbyname(domain)
+            results.append({"domain": domain, "status": "REGISTERED", "risk": "HIGH — possible impersonation"})
+        except socket.gaierror:
+            results.append({"domain": domain, "status": "NOT REGISTERED", "risk": "LOW"})
+    return results
+
+
+def check_agent_posture(config_path: str = None) -> list:
+    """Audit AI agent security posture: MCP configs, tool permissions, secrets exposure."""
+    import os, json
+    results = []
+    # Check for MCP config files
+    mcp_paths = [
+        os.path.expanduser("~/.cursor/mcp.json"),
+        os.path.expanduser("~/.vscode/mcp.json"),
+        os.path.expanduser("~/.config/claude/mcp.json"),
+    ]
+    for path in mcp_paths:
+        if os.path.exists(path):
+            try:
+                with open(path) as f:
+                    mcp_config = json.load(f)
+                servers = mcp_config.get("mcpServers", {})
+                for name, srv in servers.items():
+                    # Check for hardcoded secrets
+                    cmd = srv.get("command", "")
+                    args = srv.get("args", [])
+                    env = srv.get("env", {})
+                    risk = "LOW"
+                    issues = []
+                    if any("key" in k.lower() or "secret" in k.lower() or "token" in k.lower() for k in env):
+                        issues.append("Hardcoded secrets in env")
+                        risk = "HIGH"
+                    if "npx" in cmd or "uvx" in cmd:
+                        issues.append("Remote package execution (npx/uvx)")
+                        risk = "MEDIUM"
+                    results.append({
+                        "config": path,
+                        "server": name,
+                        "risk": risk,
+                        "issues": issues or ["None detected"],
+                    })
+            except Exception as e:
+                results.append({"config": path, "error": str(e)})
+    if not results:
+        results.append({"status": "No MCP configs found"})
+    return results
+
+
+def generate_compliance_report(findings: list, output_path: str = None) -> str:
+    """Generate a compliance report PDF."""
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import inch
+    except ImportError:
+        return "reportlab not available"
+    if output_path is None:
+        output_path = "/tmp/compliance_report.pdf"
+    doc = SimpleDocTemplate(output_path, pagesize=A4)
+    styles = getSampleStyleSheet()
+    story = []
+    story.append(Paragraph("Twinthos Sentinel — Compliance Report", styles["Title"]))
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph(f"Generated: {datetime.now(timezone.utc).isoformat()}", styles["Normal"]))
+    story.append(Spacer(1, 0.2 * inch))
+    # Risk score
+    from risk_compliance import calculate_risk_score
+    risk = calculate_risk_score(findings)
+    story.append(Paragraph(f"Risk Score: {risk['score']}/100 ({risk['level']})", styles["Heading2"]))
+    story.append(Spacer(1, 0.1 * inch))
+    # Findings
+    story.append(Paragraph(f"Total Findings: {len(findings)}", styles["Normal"]))
+    for f in findings:
+        story.append(Paragraph(f"- {f.get('title', 'Unknown')} ({f.get('severity', 'UNKNOWN')})", styles["Normal"]))
+    story.append(Spacer(1, 0.2 * inch))
+    # Compliance mapping
+    from risk_compliance import map_to_compliance
+    all_mappings = set()
+    for f in findings:
+        all_mappings.update(map_to_compliance(f))
+    if all_mappings:
+        story.append(Paragraph("Compliance Impact", styles["Heading2"]))
+        for m in sorted(all_mappings):
+            story.append(Paragraph(f"- {m}", styles["Normal"]))
+    doc.build(story)
+    return output_path
+
+
+def check_sbom(lockfile_path: str) -> str:
+    """Generate a Software Bill of Materials from a lockfile."""
+    import os
+    if not os.path.exists(lockfile_path):
+        return "Lockfile not found"
+    lines = [f"# SBOM", f"# Source: {lockfile_path}", f"# Generated: {datetime.now(timezone.utc).isoformat()}", ""]
+    with open(lockfile_path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                lines.append(f"- {line}")
+    return "\n".join(lines)
+
+
 def _osv_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
     """Query OSV.dev for known vulnerabilities (fallback when cve.now API is unavailable)."""
     vulns = []
@@ -848,6 +999,11 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Print alerts to stdout without sending")
     parser.add_argument("--digest", action="store_true", help="Send a single digest summary instead of individual alerts")
     parser.add_argument("--risk-report", action="store_true", help="Print risk score and compliance report")
+    parser.add_argument("--sbom", metavar="LOCKFILE", help="Generate SBOM from lockfile")
+    parser.add_argument("--check-extensions", action="store_true", help="Check VS Code/Cursor extensions for known malicious versions")
+    parser.add_argument("--brand-check", metavar="BRAND", help="Check for typosquatting/impersonation domains")
+    parser.add_argument("--agent-posture", action="store_true", help="Audit AI agent security posture (MCP configs, tool permissions)")
+    parser.add_argument("--compliance-report", action="store_true", help="Generate compliance report PDF")
     args = parser.parse_args()
 
     # Load config
@@ -938,6 +1094,42 @@ def main():
         os.environ["SENTINEL_DIGEST"] = "1"
     if args.risk_report:
         os.environ["SENTINEL_RISK_REPORT"] = "1"
+    if args.sbom:
+        print(check_sbom(args.sbom))
+        sys.exit(0)
+    if args.check_extensions:
+        results = check_extension_integrity()
+        if results:
+            for r in results:
+                print(f"  {r.get('extension', '?')} v{r.get('version', '?')}: {r.get('status', '?')}")
+                if r.get('action'):
+                    print(f"    ACTION: {r['action']}")
+        else:
+            print("  No extensions found or no known malicious versions detected.")
+        sys.exit(0)
+    if args.brand_check:
+        results = check_brand_protection(args.brand_check)
+        for r in results:
+            print(f"  {r['domain']}: {r['status']} ({r['risk']})")
+        sys.exit(0)
+    if args.agent_posture:
+        results = check_agent_posture()
+        for r in results:
+            if "error" in r:
+                print(f"  Error: {r['error']}")
+            elif "status" in r and r["status"].startswith("No"):
+                print(f"  {r['status']}")
+            else:
+                print(f"  {r.get('config', '?')} → {r.get('server', '?')}: {r.get('risk', '?')}")
+                for issue in r.get("issues", []):
+                    print(f"    - {issue}")
+        sys.exit(0)
+    if args.compliance_report:
+        # Use sample findings for demo
+        sample = [{"title": "AI agent vulnerability", "severity": "HIGH", "summary": "prompt injection in langchain"}]
+        path = generate_compliance_report(sample)
+        print(f"  Compliance report generated: {path}")
+        sys.exit(0)
 
     token = args.telegram_token or config.get("telegram", {}).get("token", "")
     chat = args.telegram_chat or config.get("telegram", {}).get("chat_id", "")
