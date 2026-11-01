@@ -1,243 +1,131 @@
 # Twinthos Sentinel
 
-**Continuous threat intelligence for organizations.**
+**AI vulnerability monitoring with explicit delivery and failure reporting.**
 
-A self-driving monitor that scrapes, filters, and alerts on threats that could actually harm your company — AI threats today, brand threats tomorrow. Runs wherever your infrastructure runs.
+Sentinel watches public vulnerability intelligence and selected RSS sources, filters AI-related findings, enriches CVEs with CISA KEV / FIRST EPSS, and sends alerts through Telegram or Slack/Discord webhooks. It also offers a limited pinned-dependency OSV check.
 
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![Status](https://img.shields.io/badge/status-autonomous-success)
+**Status: release candidate, not independently production-certified.** Source code and automated tests are available for review. Do not rely on this alone to secure a company or AI agent.
 
----
+## What works and what doesn't
 
-## What this is
+| Capability | Status | Boundary |
+| --- | --- | --- |
+| cve.now CVE feed + AI keyword filter | Implemented | Keyword matching is not proof a package is installed or exploitable |
+| CISA KEV / FIRST EPSS enrichment | Implemented | Upstream outages cause failures; EPSS is a prediction, not observed exploitation |
+| Telegram / Slack / Discord notifications | Implemented | Delivery requires credentials and an actual acknowledgement |
+| News RSS monitoring | Implemented | Selected feeds only; failed deliveries remain retryable |
+| OSV dependency scan | Limited | Supports exactly pinned AI dependencies in Python requirements, npm package-lock, and Go sums; not a full SCA/SBOM solution |
+| Persistent scan history, Docker health | Implemented | Health checks scan freshness, not security posture |
+| Guardian policy evaluation | **Experimental** | Cannot block agents with independent access to tools |
+| Agent passport, replay, MCP probes, compliance | **Demonstrations / partial** | No certification, runtime sandbox, independent proof ledger, or comprehensive protection |
 
-This repository is the **reference implementation** of Twinthos Sentinel — the same engine that powers the managed Twinthos digital employee. It runs on your infrastructure, scans your dependencies, and sends alerts to your team channel.
+A green unit-test badge proves test cases ran. It does not establish production safety, 24/7 availability, complete threat coverage, or exploit prevention.
 
-**This is NOT the Twinthos managed service.** The managed service at [twinthos.com](https://twinthos.com) includes hosted operation, 24/7 monitoring, and dedicated support. This repo lets you run the core scanner yourself.
+## Quick start: safe preview
 
----
-
-## The problem
-
-- Generic threat feeds are 90% noise. You get alerts about WordPress plugins while your AI stack, supply chain, or brand reputation is under attack.
-- CISA KEV tells you what's actively exploited — but not what matters to YOUR stack, YOUR suppliers, or YOUR market.
-- By the time you hear about an AI agent escape, a supply-chain compromise, or a brand-threatening leak on social media, it's already in the wild.
-
-## What it does
-
-- **Threat-intelligence scraper** — continuously pulls CVE feeds, CISA KEV, exploit databases, and news sources
-- **Organization-aware filter** — only alerts on threats that match YOUR stack, YOUR suppliers, and YOUR industry
-- **AI-first, not AI-only** — AI/agent/MCP threats are the current focus because that's where the active exploitation is
-- **CISA KEV + FIRST EPSS** — cross-references every alert against known exploited vulnerabilities and exploit prediction scores
-- **Lockfile-aware** — scans your actual `requirements.txt` / `package-lock.json` / `go.sum` against threat feeds
-- **Continuous daemon** — runs 24/7, scans every N minutes, self-heals on errors
-- **Feedback learning** — mark alerts as `ignored` or `useful`; the monitor tracks patterns and suggests keyword adjustments
-- **Telegram + Slack/Discord webhooks** — formatted alerts with CVSS, EPSS, CISA KEV flag, fix version
-- **Deduplication** — remembers alerted threats across runs; never spam you twice
-
-## What this does NOT do
-
-- **Does not auto-remediate.** Fix commands are suggested, not applied automatically. You review and apply.
-- **Does not test agents.** Canary prompts are manual test strings, not automated agent security tests.
-- **Does not certify compliance.** Compliance mapping is indicative — verify with your compliance team.
-- **Does not replace Wiz/Snyk/Dependabot.** It is a complementary AI-specific threat intelligence layer.
-- **Does not monitor agent behavior in real time.** It scans CVE feeds and news on a schedule, not live agent execution.
-- **Risk scoring is heuristic.** Based on severity, CISA KEV, EPSS, and asset criticality. Not an authoritative risk assessment.
-
-## What it now does (v1.3.0)
-
-- **Webhook alerts** — Slack and Discord webhooks in addition to Telegram
-- **Semantic keyword matching** — substring + fuzzy matching, not just word-boundary regex
-- **Asset criticality weighting** — tag systems as production/staging/internal; risk score adjusts
-- **Version-aware OSV scanning** — checks if installed version is in affected range before flagging
-- **Feedback learning** — tracks useful vs ignored patterns, suggests keyword adjustments
-- **Risk score history** — tracks scores over time to show trends
-
-## Sentinel Guardian (v2.0 preview)
-
-The next evolution: from vulnerability monitor to **safety control plane for AI agents**.
-
-Four layers, operating outside the AI model:
-1. **OBSERVE** — monitor tool calls, MCP changes, agent behavior
-2. **UNDERSTAND** — map permissions, data flows, blast radius
-3. **CONTROL** — policy gate: allow, warn, ask, block (independent of the model)
-4. **PROVE** — tamper-evident evidence ledger, audit trail, replay
-
-Five capabilities:
-- **Agent Passport** — readable identity for every agent (owner, tools, permissions, blast radius)
-- **Permission Firewall** — policy engine that blocks dangerous tool calls before execution
-- **Blast Radius Map** — what an agent could reach if compromised
-- **Sentinel Replay Lab** — isolated simulations with evidence recording
-- **Proof Ledger** — append-only, tamper-evident audit trail
-
-```
-python3 ai_sec_sentinel.py --guardian    # Run Guardian demo
-python3 ai_sec_sentinel.py --passport ID # Show agent passport
-```
-
-## Guardian security status (experimental)
-
-Guardian Gate is a **policy-evaluation API, not a security sandbox**.
-It does not independently intercept or execute an agent's tools.
-For an enforced boundary, route every tool operation through a trusted
-execution adapter and remove alternative execution paths. Treat an `ask`
-decision as **not approved** until a separate authenticated human approval
-workflow exists. Do not deploy Guardian as a production agent firewall.
-
-To start the API for local testing:
-
-```sh
-export GUARDIAN_API_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
-python3 guardian_gate.py
-```
-
-The API binds to `127.0.0.1:8098` by default. Set a second distinct secret `GUARDIAN_ADMIN_API_KEY` (at least 24 characters) for administrative `/register` calls; without it, registration is disabled. Never share the administrative secret with ordinary agents. A missing or short API key
-causes startup to fail. Protect the key outside source control; avoid exposing
-this service to untrusted networks. The `/register` endpoint is administrative,
-not cryptographic agent identity verification. Access to this endpoint must
-be restricted to trusted administrators. Agent IDs supplied in requests can
-otherwise be impersonated by callers who hold the API key.
-
-Policy rules live in `guardian_policy.json` (gitignored) and require
-explicit `allow` actions for permitted tools. With no policy file,
-tool evaluations default to `block`. An `ask` or `warn` response
-must not be treated as execution authorization by the caller.
-The builtin cloud policy currently blocks `http_request` entirely. An application using `/evaluate` must enforce the returned decision itself. The vulnerability monitor checks only supported pinned dependencies; an empty OSV result does not prove a whole lockfile is clean.
-
-The local ledger is a hash chain with per-entry integrity checks; it is
-**not independently anchored, signed, immutable or tamper-proof**.
-Anyone who can rewrite the entire ledger can still generate a new chain.
-Do not store raw secrets or sensitive payloads in agent identifiers,
-metadata or policy reasons.
-
-Run all repository tests with:
-
-```sh
-python3 -m unittest discover -s tests -v
-```
-
----
-
-## 30-second install
+Requires Python **3.11+**. Run these commands from the repository root:
 
 ```bash
 git clone https://github.com/twinthos/ai-sec-sentinel.git
 cd ai-sec-sentinel
+python3 -m venv .venv
+. .venv/bin/activate
 pip install -r requirements.txt
-python3 ai_sec_sentinel.py --since-hours 24
+python3 ai_sec_sentinel.py --dry-run --since-hours 24
 ```
 
-**Docker:**
+Preview mode performs a feed scan **without sending notifications or changing alert deduplication state**. It is not a background monitor.
+
+## Set up real alerts
+
+Choose **one** of these delivery routes:
+
+**Telegram:**
+
 ```bash
-docker run -v $(pwd)/data:/data twinthos/ai-sec-sentinel:latest
+export TELEGRAM_BOT_TOKEN="your-private-bot-token"
+export TELEGRAM_CHAT_ID="your-chat-id"
 ```
 
-**Daemon mode:**
+**Slack:**
+
+```bash
+export SENTINEL_WEBHOOK_PLATFORM="slack"
+export SENTINEL_WEBHOOK_URL="https://hooks.slack.com/services/your-private-webhook"
+```
+
+**Discord:** set `SENTINEL_WEBHOOK_PLATFORM=discord` and use a `https://discord.com/api/webhooks/...` URL.
+
+Never commit credentials or send them in issues, screenshots or agent prompts.
+
+Verify the real notification path:
+
+```bash
+python3 ai_sec_sentinel.py --test-alert
+```
+
+**Only continue once the alert appears in the intended channel.** The command exits with code 2 on missing or failed configured destinations. A receiver HTTP acknowledgement does not prove a human saw the message.
+
+Then run a live scan:
+
+```bash
+python3 ai_sec_sentinel.py --since-hours 24
+python3 ai_sec_sentinel.py --health
+```
+
+Continuous operation:
+
 ```bash
 python3 ai_sec_sentinel.py --daemon --interval 60
 ```
 
-**Lockfile check:**
+If an upstream source is unavailable, a live scan fails visibly and does not update `last_successful_run`. A daemon may retry on the next interval; its health check turns unhealthy when successful scans become stale. No alerts are delivered unless a relevant finding occurs.
+
+## Check an AI dependency lockfile
+
 ```bash
-python3 ai_sec_sentinel.py --lockfile requirements.txt --ecosystem python
+python3 ai_sec_sentinel.py --check-only --lockfile ./requirements.txt --ecosystem python
 ```
 
-**Give feedback:**
+This sends *package names and exact versions* to OSV. It does not upload the whole lockfile under the default configuration.
+
+Exit codes: **0** = no reported vulnerabilities in the packages it could check; **1** = reported vulnerabilities; **2** = invalid input, unsupported parser, unpinned AI package, OSV failure or incomplete coverage.
+
+Only exactly pinned AI dependencies are in scope. Other dependencies, different ecosystems, non-AI packages, optional dependencies, installed runtime differences and unknown packages may be unassessed. This tool is **not** a substitute for comprehensive SCA tools.
+
+## Containers
+
+Build locally and provide credentials through your container/orchestrator secret management:
+
 ```bash
-python3 ai_sec_sentinel.py --feedback CVE-2025-EXAMPLE useful
-python3 ai_sec_sentinel.py --feedback CVE-2025-EXAMPLE ignored
+docker compose build
+docker compose up -d
+docker compose ps
 ```
 
-## How it works
+The compose deployment mounts `./data:/data` and uses `SENTINEL_DATA_DIR=/data`. Do not check in this directory. A missing notification destination prevents useful live monitoring. The Kubernetes manifest is an **example**, with a deliberately invalid image placeholder until you supply a tested image pinned by digest. It does not run Guardian or the dashboard.
 
-```
-┌─────────────┐     ┌──────────────┐     ┌──────────────┐
-│ Threat feeds│────▶│ Stack-aware  │────▶│ CISA KEV +  │
-│ (CVE, KEV,  │     │ filter       │     │ EPSS enrich  │
-│ EPSS, news) │     │ AI, infra,   │     │ CVSS, EPSS,  │
-│             │     │ suppliers,   │     │ KEV flag     │
-└─────────────┘     │ brand risks  │     └──────┬───────┘
-                    └──────────────┘            │
-                                                 ▼
-┌─────────────┐     ┌──────────────┐     ┌──────────────┐
-│ Lockfile    │────▶│ Dedup +      │────▶│ Telegram /   │
-│ scanner     │     │ feedback     │     │ Discord /    │
-│ YOUR actual │     │ learning     │     │ webhook      │
-│ dependencies│     │              │     │ alert        │
-└─────────────┘     └──────────────┘     └──────────────┘
+## State, logs and access
+
+- Runtime data includes `sentinel_state.json`, `sentinel_feedback.json`, and optional Guardian logs/ledger. Mount `SENTINEL_DATA_DIR` on persistent, restricted storage.
+- The dashboard is optional, **read-only**, local-only by default, and requires `DASHBOARD_API_KEY` (24+ characters). It has no remote scan-trigger endpoint.
+- Guardian Gate is a **policy evaluation API**, not an interception layer. It requires `GUARDIAN_API_KEY` for evaluations and a separate `GUARDIAN_ADMIN_API_KEY` for registration; both should be strong and never reused. An agent with direct access to shells, network or connectors can bypass the evaluator.
+- A Guardian hash chain detects some local file modifications but is not signed or independently anchored. Protect evidence externally before treating it as audit-grade proof.
+- The repo does not remediate dependencies, prove the absence of prompt injection, run live agent penetration tests, or certify legal compliance.
+
+## Tests and evidence
+
+```bash
+python3 -m unittest discover -s tests -v
+python3 -m compileall -q .
 ```
 
-## Configuration
+GitHub CI covers deterministic fixtures, policy/ledger behavior and alert-delivery state with mocked integrations. **CI does not hold your Telegram or webhook credentials, and it cannot prove real live delivery**. Run `--test-alert` yourself after configuring channels.
 
-`sentinel_config.json` controls everything:
+Coverage limitations: only a bounded, recent CVE feed window is scanned; keyword matching and news sentiment are heuristic; unsupported packages and unavailable feeds cannot be reported as clean; overlapping daemon instances may interfere with local state and should not share the same data directory.
 
-```json
-{
-  "scan_interval_minutes": 60,
-  "alert_min_severity": 2,
-  "alert_on_medium": false,
-  "auto_remediate": false,
-  "feedback_enabled": true,
-  "learn_from_actions": true,
-  "lockfile": "requirements.txt",
-  "ecosystem": "python",
-  "telegram": {
-    "enabled": false,
-    "parse_mode": "HTML"
-  }
-}
-```
+## Vulnerability reporting
 
-## Autonomous operation
+Please use [GitHub private security advisories](https://github.com/twinthos/ai-sec-sentinel/security/advisories/new), not a public issue. See [SECURITY.md](SECURITY.md). License: MIT.
 
-| Mode | Command | Use case |
-|------|---------|----------|
-| One-shot | `python3 ai_sec_sentinel.py` | CI/CD, manual scans |
-| Daemon | `python3 ai_sec_sentinel.py --daemon --interval 60` | 24/7 monitoring |
-| Lockfile only | `python3 ai_sec_sentinel.py --lockfile requirements.txt --ecosystem python --check-only` | Dependency audit |
-| Cron | `bash install_cron.sh` | Hourly scheduled |
-
-## Competition
-
-| Tool | Type | AI-only filter | CISA KEV | EPSS | Lockfile | Daemon | Feedback | Local |
-|------|------|---------------|----------|------|----------|--------|----------|-------|
-| **This** | Monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| cve.now | Feed + MCP | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ |
-| Lakera Guard | Cloud SaaS | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
-| Protect AI | Cloud SaaS | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
-
-**What others miss:** generic CVEs drown out AI signals; no one combines CISA KEV + EPSS + lockfile + feedback learning + news/supplier monitoring in a continuous daemon.
-
-## What's new in v1.2.0
-
-- **News scanner** — RSS/news monitoring for brand, supplier, and industry threats
-- **Supplier watch** — get alerted when YOUR suppliers are breached
-- **Telegram inline buttons** — 👍 Useful / 👎 Ignore directly from alerts
-- **Offline lockfile fallback** — works even when cve.now API is down
-- **Repositioned** — from "AI Security Sentinel" to "Twinthos Sentinel": continuous threat intelligence for organizations
-
-## Roadmap
-
-- [ ] Cloud provider polling (AWS Bedrock, Azure OpenAI, Vertex AI)
-- [ ] Kubernetes pod scanner
-- [ ] SaaS AI tracker (Slack/Teams shadow AI)
-- [ ] Agent egress monitoring
-- [ ] Behavioural baseline for misalignment detection
-- [ ] Web UI (Streamlit)
-- [ ] MCP server mode — query sentinel state from Claude Code
-- [ ] Docker image on Docker Hub
-- [ ] Slack/Discord native integrations
-- [ ] Auto-PR for vulnerable dependencies
-- [ ] MITRE ATT&CK mapping for AI threats
-
-## Contributing
-
-PRs welcome. See `CONTRIBUTING.md`.
-
-## License
-
-MIT — see `LICENSE`.
-
-## Author
-
-**Tyson Mandela** — [twinthos.com](https://twinthos.com) · [github.com/twinthos](https://github.com/twinthos) · [Humanitai CIC](https://humanitai.org)
+Maintained by [Twinthos](https://twinthos.com). No affiliation with source feed vendors.
