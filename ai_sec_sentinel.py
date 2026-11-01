@@ -747,95 +747,91 @@ def check_sbom(lockfile_path: str) -> str:
 
 
 def _osv_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
-    """Query OSV.dev for known vulnerabilities (fallback when cve.now API is unavailable)."""
-    vulns = []
-    lines = content.splitlines()
-    for line in lines:
-        line = line.strip()
-        if not line or line.startswith("#"):
+    """Query OSV only for packages with exact, known versions.
+
+    OSV handles ecosystem-specific version comparison. Never compare version
+    strings lexicographically and never label unpinned dependencies vulnerable.
+    """
+    relevant = (
+        "langchain", "openai", "anthropic", "claude", "gpt", "mcp", "agent",
+        "crewai", "langgraph", "llamaindex", "huggingface", "transformers",
+        "ollama", "vllm", "litellm", "semantic",
+    )
+    ecosystems = {"python": "PyPI", "npm": "npm", "go": "Go", "rust": "crates.io",
+                  "ruby": "RubyGems", "php": "Packagist", "dotnet": "NuGet"}
+    osv_ecosystem = ecosystems.get(ecosystem)
+    if not osv_ecosystem:
+        print(f"OSV: unsupported ecosystem {ecosystem!r}")
+        return []
+
+    packages = {}
+    if ecosystem == "python":
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            match = re.match(r"^([A-Za-z0-9_.-]+)\s*==\s*([A-Za-z0-9_.!+-]+)(?:\s*;.*)?$", line)
+            if match:
+                packages[match.group(1)] = match.group(2)
+    elif ecosystem == "npm":
+        try:
+            lock = json.loads(content)
+        except (json.JSONDecodeError, ValueError):
+            print("OSV: invalid npm lockfile JSON")
+            return []
+        # package-lock versions 2/3 store installed packages in 'packages'.
+        for key, meta in lock.get("packages", {}).items():
+            if key and isinstance(meta, dict) and isinstance(meta.get("version"), str):
+                name = key.rsplit("node_modules/", 1)[-1]
+                packages[name] = meta["version"]
+        # package-lock version 1 uses dependencies.
+        for name, meta in lock.get("dependencies", {}).items():
+            if isinstance(meta, dict) and isinstance(meta.get("version"), str):
+                packages.setdefault(name, meta["version"])
+    elif ecosystem == "go":
+        for line in content.splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and not parts[1].endswith("/go.mod"):
+                packages[parts[0]] = parts[1].removeprefix("v")
+
+    findings = []
+    skipped = 0
+    for package, version in sorted(packages.items()):
+        if not any(word in package.lower() for word in relevant):
             continue
-        pkg = None
-        version = None
-        if ecosystem == "python":
-            if "==" in line:
-                pkg, version = line.split("==", 1)
-            elif ">=" in line:
-                pkg = line.split(">=", 1)[0]
-        elif ecosystem == "npm":
-            if ":" in line and "@" in line:
-                pkg = line.split(":")[1].split("@")[0]
-                version = line.split("@")[-1]
-        elif ecosystem == "go":
-            if " " in line:
-                parts = line.split()
-                if len(parts) >= 2:
-                    pkg, version = parts[0], parts[1]
-        if not pkg:
-            continue
-        if any(kw in pkg.lower() for kw in ["langchain", "openai", "anthropic", "claude", "gpt", "mcp", "agent", "crewai", "langgraph", "llamaindex", "huggingface", "transformers", "ollama", "vllm", "litellm", "semantic"]):
-            # Try OSV.dev for real version data
-            try:
-                osv_url = "https://api.osv.dev/v1/query"
-                osv_payload = {"package": {"name": pkg, "ecosystem": "PyPI" if ecosystem == "python" else ecosystem.upper()}}
-                if version:
-                    osv_payload["version"] = version
-                osv_r = requests.post(osv_url, json=osv_payload, timeout=15)
-                if osv_r.status_code == 200:
-                    osv_data = osv_r.json()
-                    osv_vulns = osv_data.get("vulns", [])
-                    for v in osv_vulns:
-                        affected = v.get("affected", [])
-                        is_affected = True
-                        for a in affected:
-                            # Check if installed version is in affected range
-                            events = a.get("ranges", [{}])[0].get("events", [])
-                            introduced = None
-                            fixed = None
-                            for ev in events:
-                                if ev.get("type") == "introduced":
-                                    introduced = ev.get("introduced")
-                                if ev.get("type") == "fixed":
-                                    fixed = ev.get("fixed")
-                            # Simple version comparison
-                            if version and fixed and version >= fixed:
-                                is_affected = False
-                                break
-                        if not is_affected:
-                            continue
-                        fixed_ver = None
-                        for a in affected:
-                            events = a.get("ranges", [{}])[0].get("events", [])
-                            for ev in events:
-                                if ev.get("type") == "fixed":
-                                    fixed_ver = ev.get("fixed")
-                        vulns.append({
-                            "id": v.get("id", pkg),
-                            "summary": f"OSV: {pkg} (v{version or 'unknown'}) has known vulns. Fixed in {fixed_ver or 'unknown'}.",
-                            "severity": {"cvss": None},
-                            "fixed_version": fixed_ver,
-                            "source": "osv",
-                            "affected": True,
-                        })
-                    if not osv_vulns:
-                        vulns.append({
-                            "id": pkg,
-                            "summary": f"OSV: {pkg} — no known vulns found.",
-                            "severity": {"cvss": None},
-                            "source": "osv",
-                        })
-                else:
-                    vulns.append({
-                        "id": pkg,
-                        "summary": f"Offline check: {pkg} is an AI-related dependency. OSV.dev returned {osv_r.status_code}. Verify latest version manually.",
-                        "severity": {"cvss": None},
-                    })
-            except Exception:
-                vulns.append({
-                    "id": pkg,
-                    "summary": f"Offline check: {pkg} is an AI-related dependency. OSV.dev unreachable. Verify latest version manually.",
-                    "severity": {"cvss": None},
+        try:
+            response = requests.post(
+                "https://api.osv.dev/v1/query",
+                json={"package": {"name": package, "ecosystem": osv_ecosystem}, "version": version},
+                timeout=15,
+            )
+            response.raise_for_status()
+            data = response.json()
+            for vuln in data.get("vulns", []):
+                fixes = []
+                for affected in vuln.get("affected", []):
+                    for version_range in affected.get("ranges", []):
+                        for event in version_range.get("events", []):
+                            if event.get("fixed"):
+                                fixes.append(event["fixed"])
+                findings.append({
+                    "id": vuln.get("id", "unknown"),
+                    "package": package,
+                    "installed_version": version,
+                    "summary": vuln.get("summary") or f"OSV reports a vulnerability affecting {package} {version}",
+                    "fixed_version": fixes[0] if fixes else None,
+                    "source": "osv",
+                    "affected": True,
                 })
-    return vulns
+        except (requests.RequestException, ValueError, KeyError) as error:
+            skipped += 1
+            print(f"OSV query failed for {package}: {type(error).__name__}")
+
+    if skipped:
+        print(f"OSV: {skipped} package(s) could not be checked; results are incomplete.")
+    if ecosystem == "python" and not packages:
+        print("OSV: no exactly pinned dependencies found; cannot assess unpinned versions.")
+    return findings
 
 
 def run_scan(config: dict, token: str = "", chat: str = "") -> int:
@@ -877,7 +873,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
                     msg += f"  → Fix: <code>{html.escape(fix_cmd)}</code>\n"
             send_telegram(msg, token, chat)
         else:
-            send_telegram(f"✅ Lockfile clean: {Path(lockfile).name}", token, chat)
+            send_telegram(f"ℹ️ No confirmed vulnerabilities in checked AI dependencies: {Path(lockfile).name}. Unpinned packages, unsupported formats and failed queries may be unassessed.", token, chat)
 
     # Feed watch
     print("Scanning cve.now feed...")
@@ -945,12 +941,13 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         epss = epss_scores.get(raw_id)
         in_kev = raw_id in kev_ids
         msg = format_alert(entry, epss_score=epss, in_kev=in_kev, cvss=cvss)
-        sent = send_telegram(msg, token, chat, cve_id=raw_id)
-        # Also send to webhook if configured
+        telegram_sent = send_telegram(msg, token, chat, cve_id=raw_id)
+        # A successful webhook counts as delivery even when Telegram is off.
         webhook_url = config.get("webhook_url", "")
+        webhook_sent = False
         if webhook_url:
-            send_webhook(msg, webhook_url, config.get("webhook_platform", "slack"))
-        if sent:
+            webhook_sent = send_webhook(msg, webhook_url, config.get("webhook_platform", "slack"))
+        if telegram_sent or webhook_sent:
             seen.add(raw_id)
             alerts_sent += 1
         else:
@@ -1141,7 +1138,7 @@ def main():
                 if fix_cmd:
                     print(f"    Fix: {fix_cmd}")
         else:
-            print("No AI-related vulnerabilities found.")
+            print("No confirmed vulnerabilities found in checked AI dependencies. Coverage may be incomplete.")
         return
 
     # Stats mode

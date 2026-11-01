@@ -4,7 +4,7 @@
 
 A self-driving monitor that scrapes, filters, and alerts on threats that could actually harm your company — AI threats today, brand threats tomorrow. Runs wherever your infrastructure runs.
 
-![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Status](https://img.shields.io/badge/status-autonomous-success)
 
 ---
@@ -74,6 +74,49 @@ Five capabilities:
 python3 ai_sec_sentinel.py --guardian    # Run Guardian demo
 python3 ai_sec_sentinel.py --passport ID # Show agent passport
 ```
+
+## Guardian security status (experimental)
+
+Guardian Gate is a **policy-evaluation API, not a security sandbox**.
+It does not independently intercept or execute an agent's tools.
+For an enforced boundary, route every tool operation through a trusted
+execution adapter and remove alternative execution paths. Treat an `ask`
+decision as **not approved** until a separate authenticated human approval
+workflow exists. Do not deploy Guardian as a production agent firewall.
+
+To start the API for local testing:
+
+```sh
+export GUARDIAN_API_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+python3 guardian_gate.py
+```
+
+The API binds to `127.0.0.1:8098` by default. Set a second distinct secret `GUARDIAN_ADMIN_API_KEY` (at least 24 characters) for administrative `/register` calls; without it, registration is disabled. Never share the administrative secret with ordinary agents. A missing or short API key
+causes startup to fail. Protect the key outside source control; avoid exposing
+this service to untrusted networks. The `/register` endpoint is administrative,
+not cryptographic agent identity verification. Access to this endpoint must
+be restricted to trusted administrators. Agent IDs supplied in requests can
+otherwise be impersonated by callers who hold the API key.
+
+Policy rules live in `guardian_policy.json` (gitignored) and require
+explicit `allow` actions for permitted tools. With no policy file,
+tool evaluations default to `block`. An `ask` or `warn` response
+must not be treated as execution authorization by the caller.
+The builtin cloud policy currently blocks `http_request` entirely. An application using `/evaluate` must enforce the returned decision itself. The vulnerability monitor checks only supported pinned dependencies; an empty OSV result does not prove a whole lockfile is clean.
+
+The local ledger is a hash chain with per-entry integrity checks; it is
+**not independently anchored, signed, immutable or tamper-proof**.
+Anyone who can rewrite the entire ledger can still generate a new chain.
+Do not store raw secrets or sensitive payloads in agent identifiers,
+metadata or policy reasons.
+
+Run all repository tests with:
+
+```sh
+python3 -m unittest discover -s tests -v
+```
+
+---
 
 ## 30-second install
 
