@@ -257,11 +257,6 @@ def _matches_synonyms(blob_lower: str, kw: str) -> bool:
             for token in blob_lower.split():
                 if "-" in token and syn in token:
                     return True
-        # Fuzzy: only for longer keywords (>=6 chars) to avoid short-word false positives
-        if len(syn) >= 6:
-            for word in blob_lower.split():
-                if len(word) >= 6 and (syn in word or word in syn):
-                    return True
     return False
 
 def is_ai_related(entry: dict) -> bool:
@@ -357,9 +352,11 @@ def fetch_entry(cve_id: str) -> dict | None:
 def fetch_cisa_kev() -> dict:
     def _do():
         r = requests.get(CISA_KEV_URL, timeout=30)
-        if r.status_code == 200:
-            return r.json()
-        return {}
+        r.raise_for_status()
+        data = r.json()
+        if not isinstance(data, dict) or not isinstance(data.get("vulnerabilities"), list):
+            raise ValueError("CISA KEV feed has an unexpected response format")
+        return data
     try:
         return _retry(_do)
     except Exception as e:
