@@ -4,7 +4,7 @@
 
 A self-driving monitor that scrapes, filters, and alerts on threats that could actually harm your company — AI threats today, brand threats tomorrow. Runs wherever your infrastructure runs.
 
-![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Status](https://img.shields.io/badge/status-autonomous-success)
 
 ---
@@ -91,7 +91,7 @@ export GUARDIAN_API_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsa
 python3 guardian_gate.py
 ```
 
-The API binds to `127.0.0.1:8098` by default. A missing or short API key
+The API binds to `127.0.0.1:8098` by default. Set a second distinct secret `GUARDIAN_ADMIN_API_KEY` (at least 24 characters) for administrative `/register` calls; without it, registration is disabled. Never share the administrative secret with ordinary agents. A missing or short API key
 causes startup to fail. Protect the key outside source control; avoid exposing
 this service to untrusted networks. The `/register` endpoint is administrative,
 not cryptographic agent identity verification. Access to this endpoint must
@@ -102,7 +102,7 @@ Policy rules live in `guardian_policy.json` (gitignored) and require
 explicit `allow` actions for permitted tools. With no policy file,
 tool evaluations default to `block`. An `ask` or `warn` response
 must not be treated as execution authorization by the caller.
-The builtin cloud policy currently blocks `http_request` entirely.
+The builtin cloud policy currently blocks `http_request` entirely. An application using `/evaluate` must enforce the returned decision itself. The vulnerability monitor checks only supported pinned dependencies; an empty OSV result does not prove a whole lockfile is clean.
 
 The local ledger is a hash chain with per-entry integrity checks; it is
 **not independently anchored, signed, immutable or tamper-proof**.
