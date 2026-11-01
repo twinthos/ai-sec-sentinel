@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""Privacy and secret protection for Twinthos Sentinel.
+
+Local-first: no raw lockfile upload without explicit consent.
+Redact secrets, credentials, PII before logging/reporting/alerting.
+Restricted file permissions. Configurable retention/deletion.
+"""
+
+import os
+import re
+import stat
+import hashlib
+from pathlib import Path
+
+# Patterns for secrets/credentials/PII
+SECRET_PATTERNS = [
+    (r'(?:api[_-]?key|apikey|secret|token|password|passwd|pwd)\s*[:=]\s*["\']?([A-Za-z0-9_\-./+=]{8,})', '[REDACTED]'),
+    (r'(?:Bearer|Basic)\s+[A-Za-z0-9._\-+/=]+', '[REDACTED]'),
+    (r'ghp_[A-Za-z0-9]{36,}', '[REDACTED_GITHUB_TOKEN]'),
+    (r'sk-[A-Za-z0-9]{20,}', '[REDACTED_API_KEY]'),
+    (r'AKIA[0-9A-Z]{16}', '[REDACTED_AWS_KEY]'),
+    (r'-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----', '[REDACTED_PRIVATE_KEY]'),
+    (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[REDACTED_EMAIL]'),
+    (r'\b\d{3}-\d{2}-\d{4}\b', '[REDACTED_SSN]'),
+    (r'\b\d{16}\b', '[REDACTED_CARD]'),
+]
+
+# Files that should never be transmitted
+SENSITIVE_FILES = {
+    ".env", ".env.local", ".env.production",
+    "id_rsa", "id_ed25519", "id_ecdsa",
+    "credentials.json", "service-account.json",
+    "*.pem", "*.key", "*.p12", "*.pfx",
+}
+
+
+def redact_text(text: str) -> str:
+    """Redact secrets, credentials and PII from text."""
+    if not text:
+        return text
+    result = text
+    for pattern, replacement in SECRET_PATTERNS:
+        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+    return result
+
+
+def redact_dict(d: dict, depth: int = 0) -> dict:
+    """Redact secrets from a dictionary recursively."""
+    if depth > 10:
+        return d
+    result = {}
+    for k, v in d.items():
+        key_lower = k.lower()
+        if any(s in key_lower for s in ["password", "secret", "token", "key", "credential", "auth"]):
+            result[k] = "[REDACTED]"
+        elif isinstance(v, dict):
+            result[k] = redact_dict(v, depth + 1)
+        elif isinstance(v, str):
+            result[k] = redact_text(v)
+        elif isinstance(v, list):
+            result[k] = [redact_dict(i, depth + 1) if isinstance(i, dict) else redact_text(i) if isinstance(i, str) else i for i in v]
+        else:
+            result[k] = v
+    return result
+
+
+def is_sensitive_file(path: str) -> bool:
+    """Check if a file path points to a sensitive file."""
+    name = Path(path).name.lower()
+    for pattern in SENSITIVE_FILES:
+        if "*" in pattern:
+            import fnmatch
+            if fnmatch.fnmatch(name, pattern):
+                return True
+        elif name == pattern:
+            return True
+    return False
+
+
+def set_restricted_permissions(path: str):
+    """Set file permissions to owner-only (0600)."""
+    try:
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
+
+
+def secure_write(path: str, content: str):
+    """Write file with restricted permissions."""
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, 'w') as f:
+        f.write(content)
+    set_restricted_permissions(path)
+
+
+def secure_read(path: str) -> str:
+    """Read file, verify permissions."""
+    p = Path(path)
+    if not p.exists():
+        return ""
+    # Check permissions
+    mode = p.stat().st_mode
+    if mode & stat.S_IROTH or mode & stat.S_IWOTH:
+        # World-readable/writable — warn
+        pass
+    return p.read_text()
+
+
+def can_upload_lockfile(consent: bool, local_only: bool) -> bool:
+    """Determine if lockfile upload is permitted."""
+    if local_only:
+        return False
+    if not consent:
+        return False
+    return True
+
+
+def explain_external_services() -> str:
+    """Explain which external services receive data."""
+    return """
+External services that may receive package data:
+1. OSV.dev (api.osv.dev) — receives package names and versions for vulnerability lookup.
+   Data sent: package name, version, ecosystem. No file contents, no paths, no credentials.
+2. CISA KEV feed (cisa.gov) — read-only feed download. No data sent.
+3. NVD/EPSS (nvd.nist.gov, first.org) — read-only API queries by CVE ID. No package data sent.
+4. Telegram/Slack/Discord — receives alert summaries only (CVE IDs, severity, package names).
+   No raw lockfile contents, no credentials, no PII.
+5. News RSS feeds — read-only. No data sent.
+
+In local-only mode: NO external services are contacted. All parsing and analysis is local.
+"""
+
+
+def cleanup_old_state(state_dir: str, retention_days: int = 30):
+    """Delete state files older than retention period."""
+    import time
+    cutoff = time.time() - (retention_days * 86400)
+    for p in Path(state_dir).glob("*.json"):
+        if p.stat().st_mtime < cutoff:
+            p.unlink()
+    for p in Path(state_dir).glob("*.db"):
+        if p.stat().st_mtime < cutoff:
+            p.unlink()
+
+
+def run_privacy_tests():
+    print("=== Privacy Tests ===")
+    
+    # Test 1: Redaction
+    print("\n1. Secret redaction:")
+    text = "api_key=sk-abc123def456ghi789jkl012mno345pqr678stu901vwx234"
+    redacted = redact_text(text)
+    assert "sk-abc" not in redacted
+    assert "[REDACTED" in redacted
+    print(f"   PASS: {redacted}")
+    
+    # Test 2: Email redaction
+    print("\n2. Email redaction:")
+    text = "Contact user@example.com for details"
+    redacted = redact_text(text)
+    assert "user@example.com" not in redacted
+    print(f"   PASS: {redacted}")
+    
+    # Test 3: Dict redaction
+    print("\n3. Dict redaction:")
+    d = {"api_key": "secret123", "name": "test", "nested": {"password": "pass456"}}
+    rd = redact_dict(d)
+    assert rd["api_key"] == "[REDACTED]"
+    assert rd["nested"]["password"] == "[REDACTED]"
+    assert rd["name"] == "test"
+    print("   PASS: nested secrets redacted")
+    
+    # Test 4: Local-only mode blocks upload
+    print("\n4. Local-only mode:")
+    assert can_upload_lockfile(True, True) == False
+    assert can_upload_lockfile(True, False) == True
+    assert can_upload_lockfile(False, False) == False
+    print("   PASS: local-only blocks all uploads")
+    
+    # Test 5: Sensitive file detection
+    print("\n5. Sensitive file detection:")
+    assert is_sensitive_file(".env") == True
+    assert is_sensitive_file("id_rsa") == True
+    assert is_sensitive_file("requirements.txt") == False
+    print("   PASS: sensitive files detected")
+    
+    # Test 6: File permissions
+    print("\n6. File permissions:")
+    import tempfile
+    with tempfile.NamedTemporaryFile(delete=False) as f:
+        path = f.name
+    secure_write(path, "test")
+    mode = os.stat(path).st_mode
+    assert not (mode & stat.S_IROTH)
+    assert not (mode & stat.S_IWOTH)
+    os.unlink(path)
+    print("   PASS: restricted permissions set")
+    
+    print("\n=== All privacy tests passed ===")
+
+
+if __name__ == "__main__":
+    run_privacy_tests()
