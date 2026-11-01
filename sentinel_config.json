@@ -71,7 +71,17 @@
     "IoT vulnerability",
     "smart home",
     "industrial IoT",
-    "IIoT"
+    "IIoT",
+    "aws",
+    "gcp",
+    "azure",
+    "cloud",
+    "kubernetes",
+    "docker",
+    "terraform",
+    "iam",
+    "ssrf",
+    "metadata"
   ],
   "monitored_accounts": [
     {
@@ -336,5 +346,16 @@
     }
   },
   "webhook_url": "",
-  "webhook_platform": "slack"
+  "webhook_platform": "slack",
+  "cloud": {
+    "enabled": true,
+    "providers": [
+      "aws",
+      "gcp",
+      "azure"
+    ],
+    "detect_cloud_credentials": true,
+    "detect_ssrf_to_metadata": true,
+    "detect_container_escape": true
+  }
 }

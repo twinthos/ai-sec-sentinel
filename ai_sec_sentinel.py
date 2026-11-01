@@ -90,6 +90,11 @@ AI_INFRA_KEYWORDS = [
     "claude desktop", "fake app", "agentic", "offensive agent",
     "agent escape", "tool poisoning", "tool abuse", "privilege escalation",
     "sandbox escape", "sandbox bypass", "browser escape",
+    # Cloud (for cloud companies)
+    "aws", "gcp", "azure", "cloud metadata", "imds", "metadata endpoint",
+    "ssrf", "ec2", "s3", "lambda", "kubernetes", "k8s", "container",
+    "iam", "role assumption", "service account", "cloud credential",
+    "terraform", "cloudformation", "helm", "docker", "registry",
 ]
 
 

@@ -101,9 +101,30 @@ def render_dashboard():
 </html>"""
 
 
+DASHBOARD_API_KEY = os.getenv("DASHBOARD_API_KEY", "")
+
 class Handler(BaseHTTPRequestHandler):
+    def _check_auth(self):
+        if not DASHBOARD_API_KEY:
+            return True  # No key configured = open (dev mode)
+        auth = self.headers.get("Authorization", "")
+        if auth == f"Bearer {DASHBOARD_API_KEY}":
+            return True
+        # Also check query param for browser access
+        from urllib.parse import parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        if qs.get("key", [""])[0] == DASHBOARD_API_KEY:
+            return True
+        return False
+
     def do_GET(self):
         path = urlparse(self.path).path
+        if path not in ("/",) and not self._check_auth():
+            self.send_response(401)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"error": "Unauthorized. Set DASHBOARD_API_KEY or pass ?key=YOUR_KEY"}')
+            return
         if path == "/":
             self.send_response(200)
             self.send_header("Content-Type", "text/html")

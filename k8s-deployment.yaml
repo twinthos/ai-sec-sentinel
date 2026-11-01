@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: twinthos-sentinel
+  labels:
+    app: twinthos-sentinel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: twinthos-sentinel
+  template:
+    metadata:
+      labels:
+        app: twinthos-sentinel
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: sentinel
+        image: twinthos/ai-sec-sentinel:latest
+        ports:
+        - containerPort: 8080
+          name: dashboard
+        - containerPort: 8098
+          name: guardian
+        env:
+        - name: TELEGRAM_BOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: sentinel-secrets
+              key: telegram-bot-token
+        - name: TELEGRAM_CHAT_ID
+          valueFrom:
+            secretKeyRef:
+              name: sentinel-secrets
+              key: telegram-chat-id
+        - name: DASHBOARD_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: sentinel-secrets
+              key: dashboard-api-key
+        - name: GUARDIAN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: sentinel-secrets
+              key: guardian-api-key
+        volumeMounts:
+        - name: sentinel-data
+          mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/status
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /api/status
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+      - name: sentinel-data
+        persistentVolumeClaim:
+          claimName: sentinel-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: twinthos-sentinel
+spec:
+  selector:
+    app: twinthos-sentinel
+  ports:
+  - port: 80
+    targetPort: 8080
+    name: dashboard
+  - port: 8098
+    targetPort: 8098
+    name: guardian
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sentinel-data-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

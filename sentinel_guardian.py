@@ -75,9 +75,18 @@ class ObserveLayer:
         dangerous_tools = {"shell_exec", "file_write", "db_query", "http_request", "code_exec"}
         if tool_name in dangerous_tools:
             return "HIGH"
-        # Check for sensitive data in params
         params_str = json.dumps(params).lower()
+        # Sensitive data
         if any(kw in params_str for kw in ["password", "secret", "token", "api_key", "passwd"]):
+            return "CRITICAL"
+        # Cloud credential exposure
+        if any(kw in params_str for kw in ["aws_secret", "gcp_key", "azure_secret", "iam_role", "service_account"]):
+            return "CRITICAL"
+        # SSRF to cloud metadata
+        if any(kw in params_str for kw in ["169.254.169.254", "metadata.google.internal", "169.254.170.2"]):
+            return "CRITICAL"
+        # Container escape
+        if any(kw in params_str for kw in ["docker.sock", "/var/run/docker", "nsenter", "cap_sys_admin"]):
             return "CRITICAL"
         return "LOW"
 
@@ -218,6 +227,15 @@ class ControlLayer:
     def __init__(self, policy_file: str = "guardian_policy.json"):
         self.policy_file = Path(policy_file)
         self.policies = self._load_policies()
+        # Add default cloud security policies
+        cloud_policies = [
+            {"tool": "http_request", "action": "block", "condition": "always", "reason": "Block SSRF to cloud metadata endpoints"},
+        ]
+        # Only add if not already present
+        existing_tools = {p.get("tool") for p in self.policies}
+        for cp in cloud_policies:
+            if cp["tool"] not in existing_tools:
+                self.policies.append(cp)
 
     def _load_policies(self) -> list:
         if self.policy_file.exists():
