@@ -33,3 +33,24 @@ jobs:
         run: python reference_adapter.py --demo
       - name: Verify CLI metadata
         run: python ai_sec_sentinel.py --version
+
+  container:
+    name: Container and Compose smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Validate Compose configuration
+        run: docker compose config -q
+      - name: Build container from repository
+        run: docker build -t twinthos-sentinel-ci:local .
+      - name: Verify container CLI entry
+        run: docker run --rm --entrypoint python3 twinthos-sentinel-ci:local ai_sec_sentinel.py --version
+      - name: Empty runtime must not report healthy
+        run: |
+          if docker run --rm --entrypoint python3 twinthos-sentinel-ci:local ai_sec_sentinel.py --health; then
+            echo "ERROR: an uninitialized scanner claimed healthy"
+            exit 1
+          fi
