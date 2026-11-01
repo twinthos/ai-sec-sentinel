@@ -33,6 +33,13 @@ def mocked_sources():
 
 
 class RuntimeSafetyTests(unittest.TestCase):
+    def test_default_config_disables_unverified_rss_and_cloud_flags(self):
+        import json
+        config = json.loads(Path("sentinel_config.json").read_text())
+        self.assertFalse(config["news"]["enabled"])
+        self.assertNotIn("monitored_accounts", config)
+        self.assertNotIn("cloud", config)
+
     def test_live_scan_requires_sink(self):
         with patch.dict(os.environ, {"SENTINEL_DRY_RUN": "0"}):
             with self.assertRaisesRegex(RuntimeError, "No alert destination"):
