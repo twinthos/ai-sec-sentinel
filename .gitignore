@@ -16,3 +16,6 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+guardian_logs/
+guardian_policy.json
+guardian_ledger.jsonl
