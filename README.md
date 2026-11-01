@@ -103,7 +103,7 @@ docker compose up -d
 docker compose ps
 ```
 
-The compose deployment mounts `./data:/data` and uses `SENTINEL_DATA_DIR=/data`. Do not check in this directory. A missing notification destination prevents useful live monitoring. The Kubernetes manifest is an **example**, with a deliberately invalid image placeholder until you supply a tested image pinned by digest. It does not run Guardian or the dashboard.
+The Compose deployment uses a persistent named Docker volume at `/data` with `SENTINEL_DATA_DIR=/data`. Protect and back up the volume; do not commit runtime data. A missing notification destination prevents useful live monitoring. The Kubernetes manifest is an **example**, with a deliberately invalid image placeholder until you supply a tested image pinned by digest. It does not run Guardian or the dashboard.
 
 ## State, logs and access
 
