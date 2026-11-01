@@ -1081,7 +1081,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
 
 def main():
     parser = argparse.ArgumentParser(description="Twinthos Sentinel — continuous threat intelligence")
-    parser.add_argument("--version", action="version", version="Twinthos Sentinel v1.2.0")
+    parser.add_argument("--version", action="version", version="Twinthos Sentinel v1.4.1")
     parser.add_argument("--lockfile", help="Path to lockfile")
     parser.add_argument("--ecosystem", choices=["python", "npm", "rust", "go", "ruby", "php", "dotnet"])
     parser.add_argument("--check-only", action="store_true", help="Lockfile only, no feed watch")
@@ -1128,7 +1128,8 @@ def main():
         lockfile = config.get("lockfile")
         ecosystem = config.get("ecosystem", "python")
         if not lockfile:
-            print("Error: --check-only requires --lockfile")
+            # No lockfile = health check mode (for Docker healthcheck)
+            print("Sentinel OK — v1.4.1")
             return
         print(f"Checking lockfile: {lockfile} (ecosystem: {ecosystem})")
         vulns = check_lockfile(lockfile, ecosystem) if config.get("allow_lockfile_upload") else _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem)

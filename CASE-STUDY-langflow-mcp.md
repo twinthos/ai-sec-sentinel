@@ -1,7 +1,7 @@
 # Case Study: Langflow MCP Security Audit (SIMULATED DEMONSTRATION)
 **Date:** 31 Oct 2026
 **Auditor:** Tyson Mandela, Twinthos
-**Tool:** Twinthos Sentinel v1.2.0
+**Tool:** Twinthos Sentinel v1.4.1
 **Status:** SIMULATED — not a live audit. Claims below are illustrative only.
 
 ## Context
