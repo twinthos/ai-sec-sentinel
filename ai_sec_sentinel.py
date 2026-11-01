@@ -35,6 +35,13 @@ try:
 except ImportError:
     sys.exit("Missing dependency: requests\nInstall with: pip install requests")
 
+# Risk scoring and compliance (optional)
+try:
+    from risk_compliance import calculate_risk_score, generate_risk_report, map_to_compliance
+    RISK_AVAILABLE = True
+except ImportError:
+    RISK_AVAILABLE = False
+
 def _retry(fn, max_attempts=3, delay=2):
     """Retry a function with exponential backoff."""
     import time as _t
@@ -725,6 +732,22 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
             digest += f"\n<b>News alerts:</b> {len(news_alerts)}\n"
         send_telegram(digest, token, chat)
 
+    # Risk report
+    if RISK_AVAILABLE and ai_entries:
+        findings = []
+        for e in ai_entries:
+            findings.append({
+                "title": e.get("title", ""),
+                "severity": {3: "CRITICAL", 2: "HIGH", 1: "MEDIUM", 0: "LOW"}.get(severity_rank(e), "LOW"),
+                "in_kev": e.get("id", "").split("#")[0].strip() in kev_ids,
+                "epss": epss_scores.get(e.get("id", "").split("#")[0].strip(), 0),
+                "summary": e.get("summary", e.get("content_text", "")),
+            })
+        risk_report = generate_risk_report(findings)
+        print(risk_report)
+        if os.getenv("SENTINEL_RISK_REPORT") == "1":
+            send_telegram(f"<pre>{html.escape(risk_report)}</pre>", token, chat)
+
     print(f"  {stats['feed_fetched']} fetched, {stats['new_entries']} new, {stats['ai_related']} AI-related, {alerts_sent} alerts sent, {stats['cisa_kev_hits']} CISA KEV, {stats['high_epss']} high-EPSS")
 
     # Adaptive: if user consistently ignores certain keywords, lower their weight
@@ -755,6 +778,7 @@ def main():
     parser.add_argument("--webhook-port", type=int, default=0, help="Start webhook server for Telegram callback buttons")
     parser.add_argument("--dry-run", action="store_true", help="Print alerts to stdout without sending")
     parser.add_argument("--digest", action="store_true", help="Send a single digest summary instead of individual alerts")
+    parser.add_argument("--risk-report", action="store_true", help="Print risk score and compliance report")
     args = parser.parse_args()
 
     # Load config
@@ -843,6 +867,8 @@ def main():
         os.environ["SENTINEL_DRY_RUN"] = "1"
     if args.digest:
         os.environ["SENTINEL_DIGEST"] = "1"
+    if args.risk_report:
+        os.environ["SENTINEL_RISK_REPORT"] = "1"
 
     token = args.telegram_token or config.get("telegram", {}).get("token", "")
     chat = args.telegram_chat or config.get("telegram", {}).get("chat_id", "")
