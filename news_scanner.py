@@ -48,7 +48,7 @@ def _load_config():
     return {}
 
 def _load_state():
-    state_path = Path(__file__).with_name("sentinel_state.json")
+    state_path = Path(__import__("os").environ.get("SENTINEL_DATA_DIR", Path(__file__).parent)) / "sentinel_state.json"
     if state_path.exists():
         try:
             return json.loads(state_path.read_text(encoding="utf-8"))
@@ -80,8 +80,8 @@ def _is_negative_sentiment(text: str) -> bool:
 
 def scan_news(max_items: int = 50) -> list[dict]:
     """Scan configured RSS/news sources for threats matching YOUR keywords."""
-    if feedparser is None:
-        return []
+    if feedparser is None or requests is None:
+        raise RuntimeError("News monitoring requires feedparser and requests; install requirements.txt")
 
     config = _load_config()
     news_config = config.get("news", {})
@@ -89,17 +89,40 @@ def scan_news(max_items: int = 50) -> list[dict]:
     sources = news_config.get("sources", NEWS_SOURCES)
     state = _load_state()
     seen = set(state.get("seen_news", []))
-    # Preserve main module state to avoid clobbering
-    _main_seen = state.get("seen", [])
-    _main_last_run = state.get("last_run")
 
     alerts = []
+    succeeded = 0
+    failed = 0
     for source in sources:
         try:
-            feed = feedparser.parse(source)
-        except Exception:
+            from urllib.parse import urlparse
+            parsed = urlparse(source)
+            if parsed.scheme != "https" or not parsed.hostname:
+                raise RuntimeError("RSS source must be an HTTPS URL")
+            # No cross-host redirects. Fetch with explicit timeouts and a body limit.
+            response = requests.get(source, timeout=(5, 15), stream=True, allow_redirects=False)
+            try:
+                if response.status_code != 200:
+                    raise RuntimeError(f"RSS source returned HTTP {response.status_code}")
+                parts = []
+                total = 0
+                for chunk in response.iter_content(chunk_size=65536):
+                    total += len(chunk)
+                    if total > 2 * 1024 * 1024:
+                        raise RuntimeError("RSS feed exceeds 2 MiB")
+                    parts.append(chunk)
+                feed = feedparser.parse(b"".join(parts))
+            finally:
+                response.close()
+            entries = feed.entries
+            if getattr(feed, "bozo", False) and not entries:
+                raise RuntimeError("RSS feed could not be parsed")
+            succeeded += 1
+        except Exception as error:
+            failed += 1
+            print(f"RSS source unavailable: {source} ({type(error).__name__})")
             continue
-        for entry in feed.entries[:max_items]:
+        for entry in entries[:max_items]:
             title = entry.get("title", "")
             link = entry.get("link", "")
             summary = entry.get("summary", "")
@@ -118,6 +141,7 @@ def scan_news(max_items: int = 50) -> list[dict]:
 
             severity = "HIGH" if _matches_keywords(blob, ["breach", "attack", "ransomware", "zero-day"]) else "MEDIUM"
             alerts.append({
+                "id": item_id,
                 "title": title,
                 "link": link,
                 "summary": summary[:200],
@@ -127,9 +151,10 @@ def scan_news(max_items: int = 50) -> list[dict]:
             })
             seen.add(item_id)
 
-    state["seen_news"] = list(seen)[-200:]
-    # Restore main module state
-    state["seen"] = _main_seen
-    state["last_run"] = _main_last_run
-    _save_state(state)
+    if sources and not succeeded:
+        raise RuntimeError("Every configured RSS source failed; news coverage unavailable")
+    if failed:
+        print(f"NEWS COVERAGE WARNING: {failed} of {len(sources)} feeds unavailable")
+    # Only the caller can mark a news alert delivered after its sink succeeds.
+    # Scanning itself is read-only, including in dry-run mode.
     return alerts

@@ -40,6 +40,17 @@ class GuardianSecurityTests(unittest.TestCase):
             path.write_text(json.dumps(entry) + "\n")
             self.assertEqual(ledger.verify_integrity()["status"], "tampered")
 
+    def test_tampered_ledger_cannot_be_reopened(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ledger.jsonl"
+            ledger = ProveLayer(str(path))
+            ledger.record("demo", "agent", {"marker": "original"})
+            entry = json.loads(path.read_text())
+            entry["data"]["marker"] = "modified"
+            path.write_text(json.dumps(entry) + "\\n")
+            with self.assertRaisesRegex(RuntimeError, "ledger verification failed"):
+                ProveLayer(str(path))
+
     def test_unknown_agent_cannot_use_tools(self):
         with tempfile.TemporaryDirectory() as tmp:
             guardian = SentinelGuardian.__new__(SentinelGuardian)

@@ -1,13 +1,35 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
+    name: Python ${{ matrix.python }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.13']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
         with:
-          python-version: '3.11'
-      - run: pip install -r requirements.txt
-      - run: python3 ai_sec_sentinel.py --version
-      - run: python3 -m unittest discover -s tests -v
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile Python sources
+        run: python -m compileall -q .
+      - name: Run offline security regression tests
+        run: python -B -m unittest discover -s tests -v
+      - name: Prove scoped allow/deny enforcement
+        run: python reference_adapter.py --demo
+      - name: Verify CLI metadata
+        run: python ai_sec_sentinel.py --version

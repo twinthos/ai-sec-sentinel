@@ -19,3 +19,7 @@ build/
 guardian_logs/
 guardian_policy.json
 guardian_ledger.jsonl
+
+data/
+*.toolsnapshot
+.mcp_drift_state
