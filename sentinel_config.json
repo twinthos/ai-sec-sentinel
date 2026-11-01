@@ -1,8 +1,9 @@
 {
   "scan_interval_minutes": 60,
-  "alert_min_severity": 2,
+  "alert_min_severity": 1,
   "alert_on_medium": false,
   "auto_remediate": false,
+  "allow_lockfile_upload": false,
   "feedback_enabled": true,
   "learn_from_actions": true,
   "sources": {

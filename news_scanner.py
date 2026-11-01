@@ -54,7 +54,7 @@ def _load_state():
             return json.loads(state_path.read_text(encoding="utf-8"))
         except Exception:
             pass
-    return {"seen_news": [], "last_news_run": None}
+    return {"seen": [], "seen_news": [], "last_run": None, "last_news_run": None}
 
 def _save_state(state: dict):
     state["last_news_run"] = datetime.now(timezone.utc).isoformat()
@@ -89,6 +89,9 @@ def scan_news(max_items: int = 50) -> list[dict]:
     sources = news_config.get("sources", NEWS_SOURCES)
     state = _load_state()
     seen = set(state.get("seen_news", []))
+    # Preserve main module state to avoid clobbering
+    _main_seen = state.get("seen", [])
+    _main_last_run = state.get("last_run")
 
     alerts = []
     for source in sources:
@@ -125,5 +128,8 @@ def scan_news(max_items: int = 50) -> list[dict]:
             seen.add(item_id)
 
     state["seen_news"] = list(seen)[-200:]
+    # Restore main module state
+    state["seen"] = _main_seen
+    state["last_run"] = _main_last_run
     _save_state(state)
     return alerts

@@ -328,17 +328,29 @@ def extract_fix_version(entry: dict) -> str | None:
 
 
 def generate_fix_command(entry: dict, ecosystem: str = "python") -> str | None:
-    """Generate a fix command for a vulnerable dependency."""
+    """Generate a fix command for a vulnerable dependency.
+
+    NOTE: This generates a suggested command based on the CVE entry.
+    Always verify the fix version is correct for your specific package
+    before running. This is a suggestion, not an automated fix.
+    """
     fix = extract_fix_version(entry)
     if not fix:
         return None
     raw_id = entry.get("id", "").split("#")[0].strip()
+    if not raw_id:
+        return None
+    # Extract package name (remove CVE ID prefix if present)
+    pkg_name = raw_id
+    if raw_id.startswith("CVE-") or raw_id.startswith("GHSA-"):
+        # Can't determine package from CVE ID alone
+        return f"# Verify fix version {fix} manually for affected package"
     if ecosystem == "python":
-        return f"pip install --upgrade {raw_id.split('-')[0]}=={fix}" if raw_id else None
+        return f"pip install --upgrade {pkg_name}>={fix}"
     elif ecosystem == "npm":
-        return f"npm install {raw_id}@{fix}" if raw_id else None
+        return f"npm install {pkg_name}@{fix}"
     elif ecosystem == "go":
-        return f"go get {raw_id}@{fix}" if raw_id else None
+        return f"go get {pkg_name}@{fix}"
     return None
 
 
@@ -476,7 +488,9 @@ def _osv_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
             # Try OSV.dev for real version data
             try:
                 osv_url = "https://api.osv.dev/v1/query"
-                osv_payload = {"package": {"name": pkg}}
+                osv_payload = {"package": {"name": pkg, "ecosystem": "PyPI" if ecosystem == "python" else ecosystem.upper()}}
+                if version:
+                    osv_payload["version"] = version
                 osv_r = requests.post(osv_url, json=osv_payload, timeout=15)
                 if osv_r.status_code == 200:
                     osv_data = osv_r.json()
@@ -522,7 +536,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
     """Run one scan cycle. Returns number of alerts sent."""
     feed_limit = config.get("feed_limit", 100)
     since_hours = config.get("since_hours", 24)
-    alert_min_sev = config.get("alert_min_severity", 2)
+    alert_min_sev = config.get("alert_min_severity", 1)  # Default: medium and above
     if config.get("alert_on_medium"):
         alert_min_sev = 1
 
@@ -541,8 +555,13 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
     lockfile = config.get("lockfile")
     ecosystem = config.get("ecosystem", "python")
     if lockfile:
-        print(f"Scanning lockfile: {lockfile}")
-        vulns = check_lockfile(lockfile, ecosystem)
+        # Consent check for uploading lockfile to cve.now
+        if not config.get("allow_lockfile_upload", False):
+            print(f"Lockfile scan (offline only): {lockfile} — set allow_lockfile_upload=true to use cve.now API")
+            vulns = _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem)
+        else:
+            print(f"Scanning lockfile: {lockfile}")
+            vulns = check_lockfile(lockfile, ecosystem)
         if vulns:
             msg = f"🔍 Lockfile scan: <b>{len(vulns)} AI-related vulnerabilities</b> in {Path(lockfile).name}\n"
             for v in vulns[:10]:
@@ -593,9 +612,17 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         if raw_id in seen:
             continue
 
-        # Check feedback — if user marked as ignored, skip forever
+        # Check feedback — if user marked as ignored, skip for 30 days
         if raw_id in feedback and feedback[raw_id].get("action") == "ignored":
-            continue
+            ignored_ts = feedback[raw_id].get("ts", "")
+            try:
+                ignored_dt = datetime.fromisoformat(ignored_ts.replace("Z", "+00:00"))
+                if datetime.now(timezone.utc) - ignored_dt < timedelta(days=30):
+                    continue
+                else:
+                    print(f"  Re-checking previously ignored CVE (30-day expiry): {raw_id}")
+            except Exception:
+                continue
 
         sev = severity_rank(entry)
         if sev < alert_min_sev:
@@ -612,14 +639,16 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         epss = epss_scores.get(raw_id)
         in_kev = raw_id in kev_ids
         msg = format_alert(entry, epss_score=epss, in_kev=in_kev, cvss=cvss)
-        send_telegram(msg, token, chat, cve_id=raw_id)
-        seen.add(raw_id)
-        alerts_sent += 1
+        sent = send_telegram(msg, token, chat, cve_id=raw_id)
+        if sent:
+            seen.add(raw_id)
+            alerts_sent += 1
+        else:
+            # Queue failed alert for retry - do NOT mark as seen
+            print(f"  Alert failed for {raw_id}, will retry next scan")
         if alerts_sent >= 5:
-            for e in ai_entries:
-                raw_id = e.get("id", "").split("#")[0].strip()
-                if raw_id and raw_id not in seen:
-                    seen.add(raw_id)
+            # Do NOT silently discard remaining - leave them for next scan
+            print(f"  Alert cap reached ({alerts_sent}), remaining threats will be processed next scan")
             break
 
     # Run Layer 2 plugins if available
@@ -660,9 +689,10 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         msg += f"<b>{entry.get('title', 'Unknown')}</b>\n"
         msg += f"{entry.get('summary', entry.get('content_text', ''))[:200]}\n\n"
         msg += f"🔗 <a href='https://cve.now/{raw_id}'>{raw_id}</a>"
-        send_telegram(msg, token, chat)
-        seen.add(raw_id)
-        alerts_sent += 1
+        sent = send_telegram(msg, token, chat)
+        if sent:
+            seen.add(raw_id)
+            alerts_sent += 1
 
     # Send news alerts
     for alert in news_alerts:
@@ -670,8 +700,9 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         msg += f"<b>{alert['title']}</b>\n"
         msg += f"{alert['summary']}\n\n"
         msg += f"🔗 <a href='{alert['link']}'>{alert['link']}</a>"
-        send_telegram(msg, token, chat)
-        alerts_sent += 1
+        sent = send_telegram(msg, token, chat)
+        if sent:
+            alerts_sent += 1
 
     if lockfile:
         stats["lockfile_vulns"] = len(vulns)
@@ -736,6 +767,31 @@ def main():
         config["lockfile"] = args.lockfile
     if args.ecosystem:
         config["ecosystem"] = args.ecosystem
+
+    # Check-only mode: lockfile scan only, no feed watch
+    if args.check_only:
+        config = load_config()
+        if args.lockfile:
+            config["lockfile"] = args.lockfile
+        if args.ecosystem:
+            config["ecosystem"] = args.ecosystem
+        lockfile = config.get("lockfile")
+        ecosystem = config.get("ecosystem", "python")
+        if not lockfile:
+            print("Error: --check-only requires --lockfile")
+            return
+        print(f"Checking lockfile: {lockfile} (ecosystem: {ecosystem})")
+        vulns = check_lockfile(lockfile, ecosystem) if config.get("allow_lockfile_upload") else _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem)
+        if vulns:
+            print(f"Found {len(vulns)} AI-related vulnerabilities:")
+            for v in vulns:
+                print(f"  - {v.get('id', 'N/A')}: {v.get('summary', '')[:100]}")
+                fix_cmd = generate_fix_command(v, ecosystem)
+                if fix_cmd:
+                    print(f"    Fix: {fix_cmd}")
+        else:
+            print("No AI-related vulnerabilities found.")
+        return
 
     # Stats mode
     if args.stats:
