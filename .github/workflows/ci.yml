@@ -9,5 +9,6 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r requirements.txt
+      - run: python3 -m compileall -q .
       - run: python3 ai_sec_sentinel.py --version
       - run: python3 -m unittest discover -s tests -v
