@@ -177,8 +177,20 @@ AI_SYNONYMS = {
 
 def _matches_synonyms(blob_lower: str, kw: str) -> bool:
     for syn in AI_SYNONYMS.get(kw.lower(), [kw]):
+        # Word boundary match (primary — prevents "rag" in "tragedy")
         if _word_boundary(blob_lower, syn):
             return True
+        # Substring match only for compound terms (hyphenated or multi-word)
+        # e.g. "langchain-utils" should match "langchain"
+        if len(syn) >= 5 and "-" in blob_lower:
+            for token in blob_lower.split():
+                if "-" in token and syn in token:
+                    return True
+        # Fuzzy: only for longer keywords (>=6 chars) to avoid short-word false positives
+        if len(syn) >= 6:
+            for word in blob_lower.split():
+                if len(word) >= 6 and (syn in word or word in syn):
+                    return True
     return False
 
 def is_ai_related(entry: dict) -> bool:
@@ -391,6 +403,26 @@ def format_alert(entry: dict, epss_score: float | None = None, in_kev: bool = Fa
         msg += f"\n\n✅ Fix: upgrade to <b>{html.escape(fix)}</b>"
 
     return msg
+
+
+def send_webhook(message: str, webhook_url: str, platform: str = "slack") -> bool:
+    """Send alert to Slack or Discord webhook."""
+    if not webhook_url:
+        return False
+    try:
+        import re as _re
+        clean = _re.sub(r'<[^>]+>', '', message)
+        if platform == "slack":
+            payload = {"text": clean}
+        elif platform == "discord":
+            payload = {"content": clean}
+        else:
+            payload = {"text": clean}
+        r = requests.post(webhook_url, json=payload, timeout=15)
+        return r.status_code in (200, 204)
+    except Exception as e:
+        print(f"Webhook send failed: {e}")
+        return False
 
 
 def send_telegram(message: str, token: str, chat_id: str, cve_id: str = "") -> bool:
@@ -665,6 +697,10 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         in_kev = raw_id in kev_ids
         msg = format_alert(entry, epss_score=epss, in_kev=in_kev, cvss=cvss)
         sent = send_telegram(msg, token, chat, cve_id=raw_id)
+        # Also send to webhook if configured
+        webhook_url = config.get("webhook_url", "")
+        if webhook_url:
+            send_webhook(msg, webhook_url, config.get("webhook_platform", "slack"))
         if sent:
             seen.add(raw_id)
             alerts_sent += 1
@@ -772,10 +808,10 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
     if config.get("learn_from_actions"):
         useful = [cid for cid, data in feedback.items() if data.get("action") == "useful"]
         ignored = [cid for cid, data in feedback.items() if data.get("action") == "ignored"]
+        ignored_keywords = set()
         if len(ignored) > 5:
             print(f"  Adaptive: {len(ignored)} CVEs marked ignored, {len(useful)} marked useful")
             # Extract common keywords from ignored CVEs to reduce their weight
-            ignored_keywords = set()
             for cid in ignored:
                 for kw in AI_KEYWORDS:
                     if kw in cid.lower():

@@ -307,5 +307,34 @@
   "stats": {
     "enabled": true
   },
-  "version": "1.2.0"
+  "version": "1.3.0",
+  "asset_criticality": {
+    "production": {
+      "weight": 3.0,
+      "keywords": [
+        "production",
+        "prod",
+        "live",
+        "customer"
+      ]
+    },
+    "staging": {
+      "weight": 1.5,
+      "keywords": [
+        "staging",
+        "dev",
+        "test"
+      ]
+    },
+    "internal": {
+      "weight": 1.0,
+      "keywords": [
+        "internal",
+        "admin",
+        "dashboard"
+      ]
+    }
+  },
+  "webhook_url": "",
+  "webhook_platform": "slack"
 }
