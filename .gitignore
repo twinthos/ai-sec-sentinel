@@ -19,3 +19,6 @@ build/
 guardian_logs/
 guardian_policy.json
 guardian_ledger.jsonl
+guardian_ledger.jsonl
+state.json
+*.jsonl
