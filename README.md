@@ -9,6 +9,14 @@ This repository focuses on two **different** tasks. The threat-intelligence scan
 
 **Maturity:** open-source reference / release candidate. Not independently audited, not certified, not a universal agent firewall or a substitute for runtime isolation.
 
+## New: enforce one MCP tool and triage ARTEX-era cloud signals
+
+The [minimal read-only MCP server](docs/AGENT-BOUNDARY-DEMO.md) implements an actual local JSON-RPC tool boundary with negative tests. It has **no shell, network or write tools**. The [ARTEX defence note](docs/ARTEX-DEFENSE.md) links primary incident research and an offline, privacy-conscious log triage example. Neither component claims to secure every agent or detect all attacks.
+
+```sh
+python3 -m unittest discover -s tests -v
+```
+
 ## See the security boundary work — one command
 
 ```sh

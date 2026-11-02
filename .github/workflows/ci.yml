@@ -29,6 +29,10 @@ jobs:
         run: python -m compileall -q .
       - name: Run offline security regression tests
         run: python -B -m unittest discover -s tests -v
+      - name: Test actual MCP stdio boundary against forbidden tool calls
+        run: python -m unittest discover -s tests -p 'test_mcp_reference_server.py' -v
+      - name: Test offline ARTEX-era cloud audit triage
+        run: python -m unittest discover -s tests -p 'test_defensive_event_triage.py' -v
       - name: Prove scoped allow/deny enforcement
         run: python reference_adapter.py --demo
       - name: Verify CLI metadata
