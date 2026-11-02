@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 
 from sentinel_guardian import ControlLayer, ObserveLayer, ProveLayer, UnderstandLayer
+from privacy import redact_text
 
 
 class DeniedAction(PermissionError):
@@ -80,6 +81,16 @@ class GuardedWorkspace:
         except (OSError, UnicodeDecodeError, ValueError):
             self._record(tool, "denied", "unsafe_or_unreadable_file")
             raise DeniedAction("File not found, unsafe, oversized or unreadable") from None
+        # Heuristic content screening is a second guard, not full DLP.
+        # If it fails, or finds obvious secrets/PII, never return raw data.
+        try:
+            contains_sensitive_data = redact_text(data) != data
+        except Exception:
+            self._record(tool, "denied", "content_screen_error")
+            raise DeniedAction("Document content could not be screened") from None
+        if contains_sensitive_data:
+            self._record(tool, "denied", "sensitive_content")
+            raise DeniedAction("Document content is not approved for release")
         # Evidence is durable BEFORE content returns.
         self._record(tool, "allowed", "scoped_read")
         return data

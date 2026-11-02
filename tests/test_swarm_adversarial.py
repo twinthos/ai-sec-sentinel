@@ -110,6 +110,22 @@ class AdversarialSwarmTests(unittest.TestCase):
         cleaned = redact_dict(payload)
         self.assertNotIn(secret, json.dumps(cleaned))
 
+    def test_authorized_read_does_not_return_obvious_embedded_secrets(self):
+        """Path permission alone must not grant obvious secret material."""
+        from reference_adapter import DeniedAction
+        samples = (
+            "Access token: Bearer " + "SYNTHETICONLY" * 3,
+            "Synthetic AWS key: " + "AKIA" + "A" * 16,
+            "Private contact: reviewer@example.test",
+        )
+        for content in samples:
+            with self.subTest(category=content.split(":")[0]):
+                (self.root / "example.md").write_text(content, encoding="utf-8")
+                with self.assertRaises(DeniedAction):
+                    self.server.workspace.execute("file_read", {"path": "example.md"})
+                self.assertNotIn(content, self.ledger.read_text())
+        self.assertEqual(self.server.workspace.ledger.verify_integrity()["status"], "intact")
+
     def test_ordinary_data_survives_redaction(self):
         payload = {"events": [{"score": 3, "message": "all clear"}, ["hello", 23]]}
         self.assertEqual(redact_dict(payload), payload)
