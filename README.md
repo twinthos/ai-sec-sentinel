@@ -3,11 +3,20 @@
 **A small, inspectable AI security project: threat monitoring + a scoped tool-execution demonstration.**
 
 [![CI](https://github.com/twinthos/ai-sec-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/twinthos/ai-sec-sentinel/actions/workflows/ci.yml)
-[Security policy](SECURITY.md) · [Threat model](docs/THREAT_MODEL.md) · [Engineering evidence](docs/EVIDENCE.md) · [Twinthos](https://twinthos.com/engineering/)
+[Security policy](SECURITY.md) · [Threat model](docs/THREAT_MODEL.md) · [Engineering evidence](docs/EVIDENCE.md) · [Twinthos](https://twinthos.com/security/)
 
 This repository focuses on two **different** tasks. The threat-intelligence scanner collects security information and sends notifications. The Guardian experiment evaluates proposed agent actions; a separate, **read-only reference adapter** proves a few specific tool restrictions can be enforced before a file is accessed.
 
 **Maturity:** open-source reference / release candidate. Not independently audited, not certified, not a universal agent firewall or a substitute for runtime isolation.
+
+## Reproducible demonstration — run it in one command
+
+```sh
+python3 examples/proof.py
+python3 defensive_event_triage.py --input examples/fixtures/synthetic_cloud_events.jsonl
+```
+
+The first command starts a real local **MCP stdio server** with synthetic files and exercises a permitted read plus denied shell, path-escape and hidden-secret access. It reports actual true/false checks. The second analyses **synthetic cloud audit events** and emits aggregate signals without identities. Neither requires a production credential or LLM API. These are deliberately scoped proofs, not a claim that Sentinel protects a real tenant or knows the attacker.
 
 ## New: enforce one MCP tool and triage ARTEX-era cloud signals
 

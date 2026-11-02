@@ -23,10 +23,10 @@ The practical threat is often abuse of **existing privileges and applications**,
 
 `defensive_event_triage.py` accepts **normalised local JSONL** with UTC timestamps and the keys `event`, `result`, `source_ip`, `account_id`, `tenant_id`. Relevant event values: `sign_in`, `user_sign_in`, `app_credential_added`, `oauth_permission_granted`, `privileged_role_granted`.
 
-Create a **synthetic** dataset in a local path outside the repo (no customer logs committed). Run:
+Start with the included **synthetic, public demonstration dataset** (not customer logs). Run:
 
 ```sh
-python3 defensive_event_triage.py --input /path/to/approved-synthetic-events.jsonl
+python3 defensive_event_triage.py --input examples/fixtures/synthetic_cloud_events.jsonl
 python3 -m unittest discover -s tests -p 'test_defensive_event_triage.py' -v
 ```
 

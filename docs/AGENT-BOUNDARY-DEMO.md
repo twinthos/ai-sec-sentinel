@@ -23,6 +23,14 @@ python3 mcp_reference_server.py \
 
 This process is a **stdio server**; connect it through an MCP client's local subprocess configuration, supplying the command and arguments above from the trusted host, not from model instructions. Do not expose it as a network server. The host must remove or isolate all other shell, file, browser and network tools; otherwise they bypass this particular boundary.
 
+## One-command, observable security demonstration
+
+```sh
+python3 examples/proof.py
+```
+
+This starts an actual MCP stdio subprocess with temporary synthetic files, then verifies a permitted read, denied shell request, denied traversal, denied hidden-file access, redacted evidence and a clean shutdown. It prints machine-readable true/false results and returns a failure exit code when a check fails. The JSON is computed from real local actions, not marketing figures.
+
 ## Test without an LLM, credentials or a customer machine
 
 ```sh

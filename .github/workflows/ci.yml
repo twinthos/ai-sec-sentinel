@@ -33,6 +33,20 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_mcp_reference_server.py' -v
       - name: Test offline ARTEX-era cloud audit triage
         run: python -m unittest discover -s tests -p 'test_defensive_event_triage.py' -v
+      - name: Verify synthetic MCP and cloud triage demo
+        run: |
+          python3 examples/proof.py > sentinel-proof.json
+          python3 -c "import json; d=json.load(open('sentinel-proof.json')); assert d['pass'] and all(d['checks'].values())"
+          python3 defensive_event_triage.py --input examples/fixtures/synthetic_cloud_events.jsonl > sentinel-triage.json
+          python3 -c "import json; d=json.load(open('sentinel-triage.json')); assert len(d['signals']) >= 2 and not d['source_identifiers_included']"
+      - name: Publish synthetic evidence artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentinel-synthetic-evidence-${{ matrix.python }}
+          path: |
+            sentinel-proof.json
+            sentinel-triage.json
+          retention-days: 7
       - name: Prove scoped allow/deny enforcement
         run: python reference_adapter.py --demo
       - name: Verify CLI metadata
