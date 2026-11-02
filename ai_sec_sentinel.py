@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.12
+#!/usr/bin/env python3
 """
 Twinthos Sentinel — continuous threat intelligence for organizations.
 
@@ -27,21 +27,8 @@ import re
 import signal
 import sys
 import time
-import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-
-
-def _normalize_text(text: str) -> str:
-    """Normalize text to catch evasion attempts (synonym, leetspeak, non-English)."""
-    if not text:
-        return ""
-    text = re.sub(r'[\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff]', '', text)
-    text = unicodedata.normalize("NFKC", text)
-    leet_map = str.maketrans("0134578", "oieasbt")
-    text = text.translate(leet_map)
-    text = text.casefold()
-    return text
 
 try:
     import requests
@@ -73,9 +60,10 @@ CVE_NOW_FEED = "https://cve.now/feed?format=json"
 CVE_NOW_API = "https://cve.now/api/v1/entries"
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 EPSS_API = "https://api.first.org/data/v1/epss"
-STATE_FILE = Path(__file__).with_name("sentinel_state.json")
+DATA_DIR = Path(os.getenv("SENTINEL_DATA_DIR", str(Path(__file__).parent)))
+STATE_FILE = DATA_DIR / "sentinel_state.json"
 CONFIG_FILE = Path(__file__).with_name("sentinel_config.json")
-FEEDBACK_FILE = Path(__file__).with_name("sentinel_feedback.json")
+FEEDBACK_FILE = DATA_DIR / "sentinel_feedback.json"
 
 AI_KEYWORDS = [
     "langchain", "llamaindex", "openai", "anthropic", "claude", "gpt",
@@ -141,6 +129,11 @@ def load_config() -> dict:
                 config["allow_lockfile_upload"] = False
             if not isinstance(config.get("auto_remediate"), bool):
                 config["auto_remediate"] = False
+            # Optional environment-based sink configuration for containers.
+            if os.getenv("SENTINEL_WEBHOOK_URL"):
+                config["webhook_url"] = os.environ["SENTINEL_WEBHOOK_URL"]
+            if os.getenv("SENTINEL_WEBHOOK_PLATFORM"):
+                config["webhook_platform"] = os.environ["SENTINEL_WEBHOOK_PLATFORM"]
             return config
         except Exception:
             pass
@@ -157,11 +150,20 @@ def load_state() -> dict:
 
 
 def atomic_write(path, data):
-    """Write file atomically via temp + rename."""
-    import tempfile, os
-    tmp = path.parent / (path.name + ".tmp")
-    tmp.write_text(data, encoding="utf-8")
-    tmp.replace(path)
+    """Atomically replace a state file; do not expose user content to other users."""
+    import tempfile
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as out:
+            out.write(data)
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(name, path)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
 
 def save_state(state: dict):
     state["last_run"] = datetime.now(timezone.utc).isoformat()
@@ -203,11 +205,8 @@ def record_feedback(cve_id: str, action: str):
 
 def _word_boundary(text: str, kw: str) -> bool:
     """Match keyword as a whole word, not a substring."""
-    # Normalize both text and keyword to catch evasion
-    norm_text = _normalize_text(text) if '_normalize_text' in globals() else text.lower()
-    norm_kw = _normalize_text(kw) if '_normalize_text' in globals() else kw.lower()
-    pattern = r"\b" + re.escape(norm_kw) + r"\b"
-    return re.search(pattern, norm_text) is not None
+    pattern = r"\b" + re.escape(kw) + r"\b"
+    return re.search(pattern, text, re.IGNORECASE) is not None
 
 # Synonym map: alternate spellings / product names (only non-trivial variants)
 AI_SYNONYMS = {
@@ -257,11 +256,6 @@ def _matches_synonyms(blob_lower: str, kw: str) -> bool:
         if len(syn) >= 5 and "-" in blob_lower:
             for token in blob_lower.split():
                 if "-" in token and syn in token:
-                    return True
-        # Fuzzy: only for longer keywords (>=6 chars) to avoid short-word false positives
-        if len(syn) >= 6:
-            for word in blob_lower.split():
-                if len(word) >= 6 and (syn in word or word in syn):
                     return True
     return False
 
@@ -334,8 +328,7 @@ def fetch_feed(limit: int = 100) -> list[dict]:
     try:
         return _retry(_do)
     except Exception as e:
-        print(f"Feed fetch error: {e}")
-        return []
+        raise RuntimeError(f"Primary vulnerability feed unavailable: {type(e).__name__}") from e
 
 
 def fetch_entry(cve_id: str) -> dict | None:
@@ -359,14 +352,15 @@ def fetch_entry(cve_id: str) -> dict | None:
 def fetch_cisa_kev() -> dict:
     def _do():
         r = requests.get(CISA_KEV_URL, timeout=30)
-        if r.status_code == 200:
-            return r.json()
-        return {}
+        r.raise_for_status()
+        data = r.json()
+        if not isinstance(data, dict) or not isinstance(data.get("vulnerabilities"), list):
+            raise ValueError("CISA KEV feed has an unexpected response format")
+        return data
     try:
         return _retry(_do)
     except Exception as e:
-        print(f"CISA KEV fetch error: {e}")
-        return {}
+        raise RuntimeError(f"CISA KEV source unavailable: {type(e).__name__}") from e
 
 
 def fetch_epss_scores(cve_ids: list[str]) -> dict:
@@ -379,6 +373,7 @@ def fetch_epss_scores(cve_ids: list[str]) -> dict:
             batch = cve_ids[i:i+100]
             query = ",".join(batch)
             r = requests.get(EPSS_API, params={"cves": query, "limit": 100}, timeout=30)
+            r.raise_for_status()
             if r.status_code == 200:
                 data = r.json()
                 rows = data.get("data", [])
@@ -389,7 +384,7 @@ def fetch_epss_scores(cve_ids: list[str]) -> dict:
                     if cve:
                         scores[cve] = float(item.get("epss", 0))
     except Exception as e:
-        print(f"EPSS fetch error: {e}")
+        raise RuntimeError(f"EPSS enrichment unavailable: {type(e).__name__}") from e
     return scores
 
 
@@ -481,7 +476,25 @@ def send_webhook(message: str, webhook_url: str, platform: str = "slack") -> boo
     """Send alert to Slack or Discord webhook."""
     if not webhook_url:
         return False
+    if os.getenv("SENTINEL_DRY_RUN") == "1":
+        print(f"[DRY-RUN webhook] {message[:300]}")
+        return True
     try:
+        from urllib.parse import urlparse
+        parsed = urlparse(webhook_url)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+            print("Webhook URL must be HTTPS without embedded credentials")
+            return False
+        allowed_hosts = {
+            "slack": {"hooks.slack.com", "hooks.slack-gov.com"},
+            "discord": {"discord.com", "discordapp.com"},
+        }
+        if parsed.hostname not in allowed_hosts.get(platform, set()):
+            print("Webhook host not allowed for configured platform")
+            return False
+        if platform == "discord" and not parsed.path.startswith("/api/webhooks/"):
+            print("Discord webhook path invalid")
+            return False
         import re as _re
         clean = _re.sub(r'<[^>]+>', '', message)
         if platform == "slack":
@@ -498,14 +511,13 @@ def send_webhook(message: str, webhook_url: str, platform: str = "slack") -> boo
 
 
 def send_telegram(message: str, token: str, chat_id: str, cve_id: str = "") -> bool:
+    if os.getenv("SENTINEL_DRY_RUN") == "1":
+        print(f"[DRY-RUN Telegram] {message[:500]}")
+        return True
     if not token or not chat_id:
         print("[TELEGRAM NOT CONFIGURED]")
         print(message[:800])
         return False
-    # Dry-run mode: print to stdout instead of sending
-    if os.getenv("SENTINEL_DRY_RUN") == "1":
-        print(f"[DRY-RUN] {message[:500]}")
-        return True
 
     # Rate limiting: small delay between sends
     time.sleep(0.5)
@@ -753,7 +765,7 @@ def check_sbom(lockfile_path: str) -> str:
     import os
     if not os.path.exists(lockfile_path):
         return "Lockfile not found"
-    lines = [f"# SBOM", f"# Source: {lockfile_path}", f"# Generated: {datetime.now(timezone.utc).isoformat()}", ""]
+    lines = [f"# Dependency inventory (NOT SPDX/CycloneDX SBOM)", f"# Source: {lockfile_path}", f"# Generated: {datetime.now(timezone.utc).isoformat()}", ""]
     with open(lockfile_path) as f:
         for line in f:
             line = line.strip()
@@ -762,100 +774,113 @@ def check_sbom(lockfile_path: str) -> str:
     return "\n".join(lines)
 
 
-def _osv_lockfile_check(path: Path, content: str, ecosystem: str) -> list[dict]:
-    """Query OSV.dev for known vulnerabilities (fallback when cve.now API is unavailable)."""
-    vulns = []
-    lines = content.splitlines()
-    for line in lines:
-        line = line.strip()
-        if not line or line.startswith("#"):
+def _osv_lockfile_check(path: Path, content: str, ecosystem: str, strict: bool = False) -> list[dict]:
+    """Query OSV only for packages with exact, known versions.
+
+    OSV handles ecosystem-specific version comparison. Never compare version
+    strings lexicographically and never label unpinned dependencies vulnerable.
+    """
+    relevant = (
+        "langchain", "openai", "anthropic", "claude", "gpt", "mcp", "agent",
+        "crewai", "langgraph", "llamaindex", "huggingface", "transformers",
+        "ollama", "vllm", "litellm", "semantic",
+    )
+    ecosystems = {"python": "PyPI", "npm": "npm", "go": "Go", "rust": "crates.io",
+                  "ruby": "RubyGems", "php": "Packagist", "dotnet": "NuGet"}
+    osv_ecosystem = ecosystems.get(ecosystem)
+    if not osv_ecosystem or ecosystem not in ("python", "npm", "go"):
+        if strict:
+            raise RuntimeError(f"Local OSV parser does not support {ecosystem!r}; use a supported lockfile or external SCA tool")
+        print(f"OSV: unsupported local parser for {ecosystem!r}")
+        return []
+
+    packages = {}
+    unpinned = []
+    if ecosystem == "python":
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            match = re.match(r"^([A-Za-z0-9_.-]+)\s*==\s*([A-Za-z0-9_.!+-]+)(?:\s*;.*)?$", line)
+            if match:
+                packages[match.group(1)] = match.group(2)
+            elif any(word in line.lower() for word in relevant):
+                unpinned.append(line[:80])
+    elif ecosystem == "npm":
+        try:
+            lock = json.loads(content)
+        except (json.JSONDecodeError, ValueError) as exc:
+            if strict:
+                raise RuntimeError("Invalid npm package-lock.json") from exc
+            print("OSV: invalid npm lockfile JSON")
+            return []
+        # package-lock versions 2/3 store installed packages in 'packages'.
+        for key, meta in lock.get("packages", {}).items():
+            if key and isinstance(meta, dict) and isinstance(meta.get("version"), str):
+                name = key.rsplit("node_modules/", 1)[-1]
+                packages[name] = meta["version"]
+        # package-lock version 1 uses dependencies.
+        for name, meta in lock.get("dependencies", {}).items():
+            if isinstance(meta, dict) and isinstance(meta.get("version"), str):
+                packages.setdefault(name, meta["version"])
+    elif ecosystem == "go":
+        for line in content.splitlines():
+            parts = line.split()
+            if len(parts) == 3 and parts[1].startswith("v") and not parts[1].endswith("/go.mod"):
+                packages[parts[0]] = parts[1].removeprefix("v")
+
+    if strict and unpinned:
+        raise RuntimeError(f"{len(unpinned)} AI dependency requirement(s) are not exactly pinned; installed version unknown")
+    findings = []
+    skipped = 0
+    for package, version in sorted(packages.items()):
+        if not any(word in package.lower() for word in relevant):
             continue
-        pkg = None
-        version = None
-        if ecosystem == "python":
-            if "==" in line:
-                pkg, version = line.split("==", 1)
-            elif ">=" in line:
-                pkg = line.split(">=", 1)[0]
-        elif ecosystem == "npm":
-            if ":" in line and "@" in line:
-                pkg = line.split(":")[1].split("@")[0]
-                version = line.split("@")[-1]
-        elif ecosystem == "go":
-            if " " in line:
-                parts = line.split()
-                if len(parts) >= 2:
-                    pkg, version = parts[0], parts[1]
-        if not pkg:
-            continue
-        if any(kw in pkg.lower() for kw in ["langchain", "openai", "anthropic", "claude", "gpt", "mcp", "agent", "crewai", "langgraph", "llamaindex", "huggingface", "transformers", "ollama", "vllm", "litellm", "semantic"]):
-            # Try OSV.dev for real version data
-            try:
-                osv_url = "https://api.osv.dev/v1/query"
-                osv_payload = {"package": {"name": pkg, "ecosystem": "PyPI" if ecosystem == "python" else ecosystem.upper()}}
-                if version:
-                    osv_payload["version"] = version
-                osv_r = requests.post(osv_url, json=osv_payload, timeout=15)
-                if osv_r.status_code == 200:
-                    osv_data = osv_r.json()
-                    osv_vulns = osv_data.get("vulns", [])
-                    for v in osv_vulns:
-                        affected = v.get("affected", [])
-                        is_affected = True
-                        for a in affected:
-                            # Check if installed version is in affected range
-                            events = a.get("ranges", [{}])[0].get("events", [])
-                            introduced = None
-                            fixed = None
-                            for ev in events:
-                                if ev.get("type") == "introduced":
-                                    introduced = ev.get("introduced")
-                                if ev.get("type") == "fixed":
-                                    fixed = ev.get("fixed")
-                            # Simple version comparison
-                            if version and fixed and version >= fixed:
-                                is_affected = False
-                                break
-                        if not is_affected:
-                            continue
-                        fixed_ver = None
-                        for a in affected:
-                            events = a.get("ranges", [{}])[0].get("events", [])
-                            for ev in events:
-                                if ev.get("type") == "fixed":
-                                    fixed_ver = ev.get("fixed")
-                        vulns.append({
-                            "id": v.get("id", pkg),
-                            "summary": f"OSV: {pkg} (v{version or 'unknown'}) has known vulns. Fixed in {fixed_ver or 'unknown'}.",
-                            "severity": {"cvss": None},
-                            "fixed_version": fixed_ver,
-                            "source": "osv",
-                            "affected": True,
-                        })
-                    if not osv_vulns:
-                        vulns.append({
-                            "id": pkg,
-                            "summary": f"OSV: {pkg} — no known vulns found.",
-                            "severity": {"cvss": None},
-                            "source": "osv",
-                        })
-                else:
-                    vulns.append({
-                        "id": pkg,
-                        "summary": f"Offline check: {pkg} is an AI-related dependency. OSV.dev returned {osv_r.status_code}. Verify latest version manually.",
-                        "severity": {"cvss": None},
-                    })
-            except Exception:
-                vulns.append({
-                    "id": pkg,
-                    "summary": f"Offline check: {pkg} is an AI-related dependency. OSV.dev unreachable. Verify latest version manually.",
-                    "severity": {"cvss": None},
+        try:
+            response = requests.post(
+                "https://api.osv.dev/v1/query",
+                json={"package": {"name": package, "ecosystem": osv_ecosystem}, "version": version},
+                timeout=15,
+            )
+            response.raise_for_status()
+            data = response.json()
+            for vuln in data.get("vulns", []):
+                fixes = []
+                for affected in vuln.get("affected", []):
+                    for version_range in affected.get("ranges", []):
+                        for event in version_range.get("events", []):
+                            if event.get("fixed"):
+                                fixes.append(event["fixed"])
+                findings.append({
+                    "id": vuln.get("id", "unknown"),
+                    "package": package,
+                    "installed_version": version,
+                    "summary": vuln.get("summary") or f"OSV reports a vulnerability affecting {package} {version}",
+                    "fixed_version": fixes[0] if fixes else None,
+                    "source": "osv",
+                    "affected": True,
                 })
-    return vulns
+        except (requests.RequestException, ValueError, KeyError) as error:
+            skipped += 1
+            print(f"OSV query failed for {package}: {type(error).__name__}")
+
+    if skipped:
+        if strict:
+            raise RuntimeError(f"OSV could not check {skipped} package(s); vulnerability status UNKNOWN")
+        print(f"OSV: {skipped} package(s) could not be checked; results are incomplete.")
+    if ecosystem == "python" and not packages:
+        print("OSV: no exactly pinned dependencies found; cannot assess unpinned versions.")
+    return findings
 
 
 def run_scan(config: dict, token: str = "", chat: str = "") -> int:
-    """Run one scan cycle. Returns number of alerts sent."""
+    """Run one scan cycle, returning successfully delivered alert count."""
+    dry_run = os.getenv("SENTINEL_DRY_RUN") == "1"
+    webhook_url = config.get("webhook_url", "")
+    if not dry_run and not ((token and chat) or webhook_url):
+        raise RuntimeError("No alert destination configured: set Telegram credentials or an HTTPS webhook (or use --dry-run)")
+    if not dry_run and webhook_url and not webhook_url.startswith("https://"):
+        raise RuntimeError("Webhook URL must use HTTPS")
     feed_limit = config.get("feed_limit", 100)
     since_hours = config.get("since_hours", 24)
     alert_min_sev = config.get("alert_min_severity", 1)  # Default: medium and above
@@ -873,37 +898,27 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
     alerts_sent = 0
     vulns = []
 
-    # Lockfile scan (async — runs in background thread so feed scan stays responsive)
+    # Lockfile scan
     lockfile = config.get("lockfile")
     ecosystem = config.get("ecosystem", "python")
     if lockfile:
-        import threading
-
-        def _bg_lockfile_scan():
-            try:
-                # Consent check for uploading lockfile to cve.now
-                if not config.get("allow_lockfile_upload", False):
-                    print(f"Lockfile scan (offline only): {lockfile} — set allow_lockfile_upload=true to use cve.now API")
-                    vulns_local = _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem)
-                else:
-                    print(f"Scanning lockfile: {lockfile}")
-                    vulns_local = check_lockfile(lockfile, ecosystem)
-                if vulns_local:
-                    msg = f"🔍 Lockfile scan: <b>{len(vulns_local)} AI-related vulnerabilities</b> in {Path(lockfile).name}\n"
-                    for v in vulns_local[:10]:
-                        msg += f"• {v.get('id', 'N/A')}\n"
-                        fix_cmd = generate_fix_command(v, ecosystem)
-                        if fix_cmd:
-                            msg += f"  → Fix: <code>{html.escape(fix_cmd)}</code>\n"
-                    send_telegram(msg, token, chat)
-                else:
-                    send_telegram(f"✅ Lockfile clean: {Path(lockfile).name}", token, chat)
-            except Exception as e:
-                print(f"Lockfile scan error: {e}")
-
-        t = threading.Thread(target=_bg_lockfile_scan, daemon=True)
-        t.start()
-        # Don't block — feed scan continues in parallel
+        # Consent check for uploading lockfile to cve.now
+        if not config.get("allow_lockfile_upload", False):
+            print(f"Lockfile scan (offline only): {lockfile} — set allow_lockfile_upload=true to use cve.now API")
+            vulns = _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem, strict=True)
+        else:
+            print(f"Scanning lockfile: {lockfile}")
+            vulns = check_lockfile(lockfile, ecosystem)
+        if vulns:
+            msg = f"🔍 Lockfile scan: <b>{len(vulns)} AI-related vulnerabilities</b> in {Path(lockfile).name}\n"
+            for v in vulns[:10]:
+                msg += f"• {v.get('id', 'N/A')}\n"
+                fix_cmd = generate_fix_command(v, ecosystem)
+                if fix_cmd:
+                    msg += f"  → Fix: <code>{html.escape(fix_cmd)}</code>\n"
+            send_telegram(msg, token, chat)
+        else:
+            send_telegram(f"ℹ️ No confirmed vulnerabilities in checked AI dependencies: {Path(lockfile).name}. Unpinned packages, unsupported formats and failed queries may be unassessed.", token, chat)
 
     # Feed watch
     print("Scanning cve.now feed...")
@@ -928,7 +943,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
             from news_scanner import scan_news
             news_alerts = scan_news()
         except Exception as e:
-            print(f"News scan error: {e}")
+            raise RuntimeError(f"Configured news monitoring failed: {e}") from e
 
     # Collect CVE IDs for EPSS batch lookup
     cve_ids = []
@@ -971,13 +986,15 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         epss = epss_scores.get(raw_id)
         in_kev = raw_id in kev_ids
         msg = format_alert(entry, epss_score=epss, in_kev=in_kev, cvss=cvss)
-        sent = send_telegram(msg, token, chat, cve_id=raw_id)
-        # Also send to webhook if configured
+        telegram_sent = send_telegram(msg, token, chat, cve_id=raw_id)
+        # A successful webhook counts as delivery even when Telegram is off.
         webhook_url = config.get("webhook_url", "")
+        webhook_sent = False
         if webhook_url:
-            send_webhook(msg, webhook_url, config.get("webhook_platform", "slack"))
-        if sent:
-            seen.add(raw_id)
+            webhook_sent = send_webhook(msg, webhook_url, config.get("webhook_platform", "slack"))
+        if telegram_sent or webhook_sent:
+            if not dry_run:
+                seen.add(raw_id)
             alerts_sent += 1
         else:
             # Queue failed alert for retry - do NOT mark as seen
@@ -989,11 +1006,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
 
     # Run Layer 2 plugins if available
     plugin_findings = []
-    try:
-        from plugins.canary_prompts import run_canary_tests
-        plugin_findings.extend(run_canary_tests())
-    except Exception:
-        pass
+    # Manual canary prompt examples are NOT automated security findings.
     try:
         from plugins.mcp_drift import scan_mcp_drift
         mcp_path = config.get("mcp_config_path")
@@ -1022,23 +1035,32 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         if raw_id in seen:
             continue
         msg = f"🏢 <b>Supplier Threat Alert</b>\n\n"
-        msg += f"<b>{entry.get('title', 'Unknown')}</b>\n"
-        msg += f"{entry.get('summary', entry.get('content_text', ''))[:200]}\n\n"
+        msg += f"<b>{html.escape(str(entry.get('title', 'Unknown')))}</b>\n"
+        msg += f"{html.escape(str(entry.get('summary', entry.get('content_text', ''))[:200]))}\n\n"
         msg += f"🔗 <a href='https://cve.now/{raw_id}'>{raw_id}</a>"
         sent = send_telegram(msg, token, chat)
-        if sent:
-            seen.add(raw_id)
+        webhook_sent = send_webhook(msg, webhook_url, config.get("webhook_platform", "slack")) if webhook_url else False
+        if sent or webhook_sent:
+            if not dry_run:
+                seen.add(raw_id)
             alerts_sent += 1
 
-    # Send news alerts
+    # Send news alerts; unacknowledged news stays eligible on the next run.
+    delivered_news = set(state.get("seen_news", []))
     for alert in news_alerts:
-        msg = f"📰 <b>News Threat Alert — {alert['severity']}</b>\n\n"
-        msg += f"<b>{alert['title']}</b>\n"
-        msg += f"{alert['summary']}\n\n"
-        msg += f"🔗 <a href='{alert['link']}'>{alert['link']}</a>"
+        msg = f"📰 <b>News Threat Alert — {html.escape(str(alert['severity']))}</b>\n\n"
+        msg += f"<b>{html.escape(str(alert['title']))}</b>\n"
+        msg += f"{html.escape(str(alert['summary']))}\n\n"
+        link = str(alert.get("link", ""))
+        if link.startswith("https://"):
+            msg += f"🔗 {html.escape(link)}"
         sent = send_telegram(msg, token, chat)
-        if sent:
+        webhook_sent = send_webhook(msg, webhook_url, config.get("webhook_platform", "slack")) if webhook_url else False
+        if sent or webhook_sent:
             alerts_sent += 1
+            if not dry_run:
+                delivered_news.add(alert["id"])
+    state["seen_news"] = sorted(delivered_news)[-200:]
 
     if lockfile:
         stats["lockfile_vulns"] = len(vulns)
@@ -1100,8 +1122,13 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
             "ignored_keywords": sorted(ignored_keywords) if ignored_keywords else [],
         }
 
-    state["seen"] = list(seen)[-500:]
-    save_state(state)
+    if not dry_run:
+        state["seen"] = sorted(seen)[-500:]
+        state["last_successful_run"] = datetime.now(timezone.utc).isoformat()
+        state["last_scan_stats"] = stats
+        save_state(state)
+    else:
+        print("[DRY-RUN] No notifications delivered and no alert state was changed.")
     return alerts_sent
 
 
@@ -1110,7 +1137,9 @@ def main():
     parser.add_argument("--version", action="version", version="Twinthos Sentinel v1.4.1")
     parser.add_argument("--lockfile", help="Path to lockfile")
     parser.add_argument("--ecosystem", choices=["python", "npm", "rust", "go", "ruby", "php", "dotnet"])
-    parser.add_argument("--check-only", action="store_true", help="Lockfile only, no feed watch")
+    parser.add_argument("--check-only", action="store_true", help="Check pinned AI dependencies; exits nonzero on findings or incomplete coverage")
+    parser.add_argument("--health", action="store_true", help="Check freshness of last successful real scan (no network I/O)")
+    parser.add_argument("--test-alert", action="store_true", help="Send a synthetic test alert to every configured destination")
     parser.add_argument("--feed-limit", type=int, default=100)
     parser.add_argument("--since-hours", type=int, default=24)
     parser.add_argument("--daemon", action="store_true", help="Continuous daemon mode")
@@ -1121,13 +1150,13 @@ def main():
     parser.add_argument("--telegram-chat", default=os.getenv("TELEGRAM_CHAT_ID", ""))
     parser.add_argument("--webhook-port", type=int, default=0, help="Start webhook server for Telegram callback buttons")
     parser.add_argument("--dry-run", action="store_true", help="Print alerts to stdout without sending")
-    parser.add_argument("--digest", action="store_true", help="Send a single digest summary instead of individual alerts")
+    parser.add_argument("--digest", action="store_true", help="Send an additional digest after individual alerts")
     parser.add_argument("--risk-report", action="store_true", help="Print risk score and compliance report")
-    parser.add_argument("--sbom", metavar="LOCKFILE", help="Generate SBOM from lockfile")
+    parser.add_argument("--sbom", metavar="LOCKFILE", help="Print a dependency inventory (not SPDX or CycloneDX)")
     parser.add_argument("--check-extensions", action="store_true", help="Check VS Code/Cursor extensions for known malicious versions")
     parser.add_argument("--brand-check", metavar="BRAND", help="Check for typosquatting/impersonation domains")
     parser.add_argument("--agent-posture", action="store_true", help="Audit AI agent security posture (MCP configs, tool permissions)")
-    parser.add_argument("--compliance-report", action="store_true", help="Generate compliance report PDF")
+    parser.add_argument("--compliance-report", action="store_true", help="Generate a DEMO PDF using synthetic findings, not a real compliance audit")
     parser.add_argument("--demo", action="store_true", help="Run all checks in sequence (demo mode)")
     parser.add_argument("--guardian", action="store_true", help="Run Sentinel Guardian demo (agent security control plane)")
     parser.add_argument("--passport", metavar="AGENT_ID", help="Show agent passport (blast radius, permissions)")
@@ -1144,6 +1173,26 @@ def main():
     if args.ecosystem:
         config["ecosystem"] = args.ecosystem
 
+    # Health is distinct from a vulnerability scan or a process being alive.
+    if args.health:
+        from datetime import datetime as _dt, timezone as _tz
+        state = load_state()
+        stamp = state.get("last_successful_run")
+        if not stamp:
+            print("UNHEALTHY: no successful live scan recorded")
+            return 2
+        try:
+            age = (_dt.now(_tz.utc) - _dt.fromisoformat(stamp.replace("Z", "+00:00"))).total_seconds()
+            max_age = max(300, int(config.get("scan_interval_minutes", 60)) * 180)
+            if age < 0 or age > max_age:
+                print(f"UNHEALTHY: last live scan is {int(age)} seconds old")
+                return 2
+        except (TypeError, ValueError, OverflowError):
+            print("UNHEALTHY: invalid last successful scan timestamp")
+            return 2
+        print(f"HEALTHY: last successful live scan {int(age)} seconds ago")
+        return 0
+
     # Check-only mode: lockfile scan only, no feed watch
     if args.check_only:
         config = load_config()
@@ -1154,11 +1203,17 @@ def main():
         lockfile = config.get("lockfile")
         ecosystem = config.get("ecosystem", "python")
         if not lockfile:
-            # No lockfile = health check mode (for Docker healthcheck)
-            print("Sentinel OK — v1.4.1")
-            return
+            print("ERROR: --check-only requires --lockfile or a configured lockfile")
+            return 2
+        if not Path(lockfile).is_file():
+            print(f"ERROR: lockfile does not exist: {lockfile}")
+            return 2
         print(f"Checking lockfile: {lockfile} (ecosystem: {ecosystem})")
-        vulns = check_lockfile(lockfile, ecosystem) if config.get("allow_lockfile_upload") else _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem)
+        try:
+            vulns = _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem, strict=True)
+        except (OSError, RuntimeError, ValueError) as error:
+            print(f"INCOMPLETE: {error}")
+            return 2
         if vulns:
             print(f"Found {len(vulns)} AI-related vulnerabilities:")
             for v in vulns:
@@ -1167,8 +1222,8 @@ def main():
                 if fix_cmd:
                     print(f"    Fix: {fix_cmd}")
         else:
-            print("No AI-related vulnerabilities found.")
-        return
+            print("No confirmed vulnerabilities found in checked AI dependencies. Coverage may be incomplete.")
+        return 1 if vulns else 0
 
     # Stats mode
     if args.stats:
@@ -1187,7 +1242,7 @@ def main():
         kev_hits = sum(1 for e in ai_entries if e.get("id", "").split("#")[0].strip() in kev_ids)
         lockfile_vulns = 0
         if config.get("lockfile"):
-            vulns = check_lockfile(config["lockfile"], config.get("ecosystem", "python"))
+            vulns = _osv_lockfile_check(Path(config["lockfile"]), Path(config["lockfile"]).read_text(encoding="utf-8"), config.get("ecosystem", "python"), strict=True)
             lockfile_vulns = len(vulns)
         ignored = [cid for cid, data in feedback.items() if data.get("action") == "ignored"]
         print(f"=== Sentinel Stats ===")
@@ -1300,7 +1355,7 @@ def main():
         print(f"  Generated: {path}")
         print()
         print("=" * 60)
-        print("  Demo complete. All systems operational.")
+        print("  DEMO COMPLETE. This does not establish production security or agent enforcement.")
         print("=" * 60)
         sys.exit(0)
 
@@ -1327,6 +1382,7 @@ def main():
         g.register_agent(args.passport, args.passport, "owner",
                          ["file_read", "http_request"], ["read_files"], ["internal_docs"])
         p = g.understand.get_passport(args.passport)
+        print("  DEMO PASSPORT ONLY — not an existing registered agent")
         print(f"  Agent: {p['name']}")
         print(f"  Tools: {p['tools']}")
         print(f"  Data access: {p['data_access']}")
@@ -1337,11 +1393,36 @@ def main():
     token = args.telegram_token or config.get("telegram", {}).get("token", "")
     chat = args.telegram_chat or config.get("telegram", {}).get("chat_id", "")
 
+    if args.test_alert:
+        if args.dry_run or os.getenv("SENTINEL_DRY_RUN") == "1":
+            print("ERROR: --test-alert must send a real message; remove --dry-run")
+            return 2
+        destinations = []
+        message = "✅ <b>Twinthos Sentinel test alert</b> — delivery-path verification, no real vulnerability."
+        if token and chat:
+            destinations.append(("Telegram", send_telegram(message, token, chat)))
+        webhook = config.get("webhook_url", "")
+        if webhook:
+            destinations.append(("Webhook", send_webhook(message, webhook, config.get("webhook_platform", "slack"))))
+        if not destinations:
+            print("ERROR: no destinations configured for --test-alert")
+            return 2
+        for destination, sent in destinations:
+            print(f"TEST ALERT {destination}: {'ACKNOWLEDGED' if sent else 'FAILED'}")
+        return 0 if all(sent for _, sent in destinations) else 2
+
     if args.webhook_port:
-        secret = config.get("telegram", {}).get("webhook_secret", "")
+        secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
+        if len(secret) < 24:
+            print("ERROR: TELEGRAM_WEBHOOK_SECRET must be configured (>=24 characters)")
+            return 2
         print(f"Starting webhook server on port {args.webhook_port}...")
         _webhook_server(token, args.webhook_port, secret=secret)
         return
+
+    if not args.dry_run and not ((token and chat) or config.get("webhook_url")):
+        print("ERROR: configure TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID or SENTINEL_WEBHOOK_URL, or use --dry-run", file=sys.stderr)
+        return 2
 
     if args.daemon:
         # Graceful shutdown handler
@@ -1357,12 +1438,17 @@ def main():
             try:
                 run_scan(config, token, chat)
             except Exception as e:
-                print(f"Scan error: {e}")
+                print(f"Scan error: {e}", file=sys.stderr)
             if not _shutdown["flag"]:
                 time.sleep(args.interval * 60)
         print("Daemon stopped gracefully.")
     else:
-        run_scan(config, token, chat)
+        try:
+            run_scan(config, token, chat)
+        except (OSError, RuntimeError, ValueError, KeyError) as e:
+            print(f"SCAN FAILED: {e}", file=sys.stderr)
+            return 2
+    return 0
 
 
 def _handle_callback_query(update: dict, token: str):
@@ -1384,46 +1470,17 @@ def _webhook_server(token: str, port: int = 8080, secret: str = ""):
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
-            # Verify secret token (Telegram)
+            # Verify secret token
             if secret:
                 provided = self.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
                 if provided != secret:
-                    # Check if it's a GitHub webhook (different secret header)
-                    gh_secret = self.headers.get("X-Hub-Signature-256", "")
-                    if not gh_secret:
-                        self.send_response(403)
-                        self.end_headers()
-                        self.wfile.write(b"Forbidden")
-                        return
+                    self.send_response(403)
+                    self.end_headers()
+                    self.wfile.write(b"Forbidden")
+                    return
             try:
                 length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(length)
-                # Detect event type
-                event_type = self.headers.get("X-GitHub-Event", "")
-                if event_type == "push":
-                    # GitHub push event → trigger scan
-                    import json as _json
-                    try:
-                        payload = _json.loads(body)
-                        repo = payload.get("repository", {}).get("full_name", "unknown")
-                        print(f"GitHub push event from {repo} — triggering scan")
-                    except Exception:
-                        pass
-                    # Trigger scan in background
-                    import threading
-
-                    def _bg_scan():
-                        try:
-                            cfg = load_config() if 'load_config' in globals() else {}
-                            run_scan(cfg, token, "")
-                        except Exception as e:
-                            print(f"Scan trigger error: {e}")
-
-                    threading.Thread(target=_bg_scan, daemon=True).start()
-                    self.send_response(200)
-                    self.end_headers()
-                    self.wfile.write(b"Scan triggered")
-                    return
                 update = json.loads(body)
                 _handle_callback_query(update, token)
                 self.send_response(200)
@@ -1443,4 +1500,4 @@ def _webhook_server(token: str, port: int = 8080, secret: str = ""):
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

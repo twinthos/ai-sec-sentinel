@@ -1,36 +1,33 @@
 # Contributing to Twinthos Sentinel
 
-## How to contribute
+## Scope and responsible use
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Make your changes
-4. Run tests: `python -m unittest tests.test_sentinel_core tests.test_comprehensive -v`
-5. Commit with a clear message
-6. Push to your fork
-7. Open a pull request
+This is a defensive, open-source **reference** tool. Do not submit live customer records, exploit payloads, passwords, access tokens or confidential infrastructure details. Report vulnerabilities privately using [GitHub Security Advisories](https://github.com/twinthos/ai-sec-sentinel/security/advisories/new), not a public issue.
 
-## Code standards
+## Local development
 
-- Python 3.10+ compatible
-- All new features must have tests
-- No secrets in code or config files
-- Use `privacy.redact_text()` for any user-facing output
-- Follow existing code style (PEP 8)
+Requires Python **3.11+**. The scoped file adapter uses POSIX directory file descriptors and is tested on Linux. The scanner uses the dependencies declared in `requirements.txt`.
 
-## Security
+```sh
+git clone https://github.com/twinthos/ai-sec-sentinel.git
+cd ai-sec-sentinel
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install -r requirements.txt
+python3 -m unittest discover -s tests -v
+python3 examples/proof.py
+python3 defensive_event_triage.py --input examples/fixtures/synthetic_cloud_events.jsonl
+```
 
-- Report vulnerabilities via SECURITY.md process
-- Do not open public issues for security vulnerabilities
-- All PRs are reviewed for security implications
+These commands use synthetic fixtures. **Do not run live monitoring mode in CI or a PR.** Live monitoring needs an explicitly configured and tested alert destination. A preview (`python3 ai_sec_sentinel.py --dry-run --since-hours 24`) may fetch public feeds but does not send notifications.
 
-## Testing
+## Changes
 
-- Run full test suite before submitting PR
-- Add tests for new features
-- Do not skip failing tests
-- Do not modify test expectations to make tests pass
+- Add negative tests for every new permission or tool.
+- Keep the MCP reference boundary closed to shell, writes, network and unknown operations unless a separate, reviewed threat model justifies expansion.
+- Demonstrate actual tool enforcement rather than trusting an API response or an AI model's refusal.
+- Support public claims with dated source material. Distinguish synthetic examples from field evidence and ensure tests are reproducible.
+- Do not claim production protection, compliance certification, real-world detection efficacy or exploit prevention from this repository.
+- Never include sensitive logs in public GitHub issues, PR bodies or screenshots.
 
-## License
-
-By contributing, you agree that your contributions will be licensed under the MIT License.
+A reviewable PR describes the threat, the specific permitted and denied behaviours, the tests, and residual risk.

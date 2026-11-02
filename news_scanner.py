@@ -36,12 +36,6 @@ NEWS_SOURCES = [
     "https://www.theverge.com/rss/index.xml",
     "https://techcrunch.com/feed/",
     "https://www.wired.com/feed/rss",
-    "https://cybersecuritynews.com/feed/",
-    "https://feeds.feedburner.com/TheHackersNews",
-    "https://www.bleepingcomputer.com/feed/",
-    "https://krebsonsecurity.com/feed/",
-    "https://theinjection.dev/week/feed/",
-    "https://www.ncsc.gov.uk/blog/rss",
 ]
 
 def _load_config():
@@ -54,7 +48,7 @@ def _load_config():
     return {}
 
 def _load_state():
-    state_path = Path(__file__).with_name("sentinel_state.json")
+    state_path = Path(__import__("os").environ.get("SENTINEL_DATA_DIR", Path(__file__).parent)) / "sentinel_state.json"
     if state_path.exists():
         try:
             return json.loads(state_path.read_text(encoding="utf-8"))
@@ -67,34 +61,10 @@ def _save_state(state: dict):
     state_path = Path(__file__).with_name("sentinel_state.json")
     atomic_write(state_path, json.dumps(state, indent=2))
 
-def _normalize_text(text: str) -> str:
-    """Normalize text to catch evasion attempts.
-
-    Handles:
-    - Leetspeak (1->i, 0->o, 3->e, 4->a, 5->s, 7->t, 8->b)
-    - Unicode normalization (non-English homoglyphs)
-    - Zero-width character removal
-    - Case folding
-    """
-    if not text:
-        return ""
-    # Remove zero-width and invisible characters
-    text = re.sub(r'[\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff]', '', text)
-    # Unicode normalization (NFKC) — catches homoglyphs
-    import unicodedata
-    text = unicodedata.normalize("NFKC", text)
-    # Leetspeak normalization
-    leet_map = str.maketrans("0134578", "oieasbt")
-    text = text.translate(leet_map)
-    # Case fold (handles ß -> ss, etc.)
-    text = text.casefold()
-    return text
-
-
 def _matches_keywords(entry_text: str, keywords: list[str]) -> bool:
-    text = _normalize_text(entry_text)
+    text = entry_text.lower()
     for kw in keywords:
-        pattern = r"\b" + re.escape(_normalize_text(kw)) + r"\b"
+        pattern = r"\b" + re.escape(kw.lower()) + r"\b"
         if re.search(pattern, text):
             return True
     return False
@@ -108,101 +78,10 @@ def _is_negative_sentiment(text: str) -> bool:
     ]
     return any(term in text.lower() for term in negative)
 
-_COMMON_WORDS = {
-    "the", "a", "an", "in", "on", "at", "to", "for", "of", "and", "or",
-    "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
-    "do", "does", "did", "will", "would", "could", "should", "may", "might",
-    "can", "shall", "must", "need", "dare", "ought", "used", "new", "more",
-    "most", "other", "some", "such", "no", "nor", "not", "only", "own",
-    "same", "so", "than", "too", "very", "just", "because", "as", "until",
-    "while", "about", "against", "between", "into", "through", "during",
-    "before", "after", "above", "below", "from", "up", "down", "out", "off",
-    "over", "under", "again", "further", "then", "once", "here", "there",
-    "when", "where", "why", "how", "all", "each", "few", "both", "any",
-    "hackers", "users", "attack", "attacks", "breach", "breaches", "security",
-    "vulnerability", "vulnerabilities", "exploit", "exploits", "malware",
-    "ransomware", "threat", "threats", "data", "system", "systems", "server",
-    "servers", "network", "networks", "code", "remote", "critical", "high",
-    "medium", "low", "zero", "day", "zero-day", "patch", "patches", "fixed",
-    "flaw", "flaws", "bug", "bugs", "issue", "issues", "using", "used",
-    "could", "lets", "let", "hack", "hacked", "hijack", "steal", "steals",
-    "stealing", "leak", "leaks", "leaking", "expose", "exposed", "exposure",
-    "target", "targets", "targeting", "targeted", "gain", "gains", "access",
-    "accessed", "accessing", "run", "running", "runs", "execute", "executed",
-    "execution", "windows", "linux", "mac", "ios", "android", "web", "api",
-    "apis", "app", "apps", "application", "applications", "service", "services",
-    "account", "accounts", "password", "passwords", "credential", "credentials",
-    "token", "tokens", "key", "keys", "admin", "administrator", "domain",
-    "controller", "controllers", "active", "directory", "kerberos", "kerberoasting",
-    "lateral", "movement", "privilege", "escalation", "privileges", "remote",
-    "code", "execution", "rce", "arbitrary", "unauthenticated", "authenticated",
-    "users", "user", "customer", "customers", "company", "companies",
-    "organization", "organizations", "worldwide", "global", "international",
-    "china", "chinese", "russia", "russian", "north", "korean", "korea",
-    "iran", "iranian", "state", "sponsored", "group", "groups", "actor",
-    "actors", "threat", "threats", "intelligence", "research", "researchers",
-    "report", "reports", "reported", "confirmed", "links", "linked",
-    "million", "billion", "thousand", "hundred", "over", "under", "more",
-    "less", "than", "about", "around", "approximately", "estimated",
-    "new", "old", "latest", "recent", "update", "updated", "updates",
-    "release", "released", "releases", "version", "versions",
-    "ai", "artificial", "intelligence", "machine", "learning", "deep",
-    "neural", "model", "models", "llm", "llms", "gpt", "claude", "gemini",
-    "openai", "anthropic", "google", "microsoft", "meta", "facebook",
-    "apple", "amazon", "aws", "azure", "gcp", "cloud",
-    "open", "source", "tool", "tools", "framework", "frameworks",
-    "platform", "platforms", "agent", "agents", "agentic", "automated",
-    "automation", "autonomous", "autonomy",
-}
-
-
-def _auto_expand_keywords(title: str, config: dict) -> None:
-    """Extract capitalized tool/product names from a title and add to config keywords.
-
-    Looks for capitalized words (3+ chars) that are not common English words.
-    Adds them to config['news']['keywords'] if not already present.
-    Saves config atomically.
-    """
-    import re
-    # Find capitalized words (potential product/tool names)
-    candidates = re.findall(r'\b[A-Z][a-zA-Z0-9]{2,}\b', title)
-    # Also find ALL-CAPS acronyms (3+ chars)
-    candidates += re.findall(r'\b[A-Z]{3,}\b', title)
-
-    new_keywords = []
-    for candidate in candidates:
-        lower = candidate.lower()
-        if lower in _COMMON_WORDS:
-            continue
-        if len(candidate) < 3:
-            continue
-        # Skip if already in keywords
-        existing = [k.lower() for k in config.get("news", {}).get("keywords", [])]
-        if lower not in existing:
-            new_keywords.append(candidate)
-
-    if not new_keywords:
-        return
-
-    # Add to config
-    news_config = config.setdefault("news", {})
-    kw_list = news_config.setdefault("keywords", [])
-    for kw in new_keywords:
-        if kw not in kw_list:
-            kw_list.append(kw)
-
-    # Save config atomically
-    try:
-        config_path = Path(__file__).with_name("sentinel_config.json")
-        atomic_write(config_path, json.dumps(config, indent=2))
-    except Exception:
-        pass
-
-
 def scan_news(max_items: int = 50) -> list[dict]:
     """Scan configured RSS/news sources for threats matching YOUR keywords."""
-    if feedparser is None:
-        return []
+    if feedparser is None or requests is None:
+        raise RuntimeError("News monitoring requires feedparser and requests; install requirements.txt")
 
     config = _load_config()
     news_config = config.get("news", {})
@@ -210,17 +89,40 @@ def scan_news(max_items: int = 50) -> list[dict]:
     sources = news_config.get("sources", NEWS_SOURCES)
     state = _load_state()
     seen = set(state.get("seen_news", []))
-    # Preserve main module state to avoid clobbering
-    _main_seen = state.get("seen", [])
-    _main_last_run = state.get("last_run")
 
     alerts = []
+    succeeded = 0
+    failed = 0
     for source in sources:
         try:
-            feed = feedparser.parse(source)
-        except Exception:
+            from urllib.parse import urlparse
+            parsed = urlparse(source)
+            if parsed.scheme != "https" or not parsed.hostname:
+                raise RuntimeError("RSS source must be an HTTPS URL")
+            # No cross-host redirects. Fetch with explicit timeouts and a body limit.
+            response = requests.get(source, timeout=(5, 15), stream=True, allow_redirects=False)
+            try:
+                if response.status_code != 200:
+                    raise RuntimeError(f"RSS source returned HTTP {response.status_code}")
+                parts = []
+                total = 0
+                for chunk in response.iter_content(chunk_size=65536):
+                    total += len(chunk)
+                    if total > 2 * 1024 * 1024:
+                        raise RuntimeError("RSS feed exceeds 2 MiB")
+                    parts.append(chunk)
+                feed = feedparser.parse(b"".join(parts))
+            finally:
+                response.close()
+            entries = feed.entries
+            if getattr(feed, "bozo", False) and not entries:
+                raise RuntimeError("RSS feed could not be parsed")
+            succeeded += 1
+        except Exception as error:
+            failed += 1
+            print(f"RSS source unavailable: {source} ({type(error).__name__})")
             continue
-        for entry in feed.entries[:max_items]:
+        for entry in entries[:max_items]:
             title = entry.get("title", "")
             link = entry.get("link", "")
             summary = entry.get("summary", "")
@@ -239,6 +141,7 @@ def scan_news(max_items: int = 50) -> list[dict]:
 
             severity = "HIGH" if _matches_keywords(blob, ["breach", "attack", "ransomware", "zero-day"]) else "MEDIUM"
             alerts.append({
+                "id": item_id,
                 "title": title,
                 "link": link,
                 "summary": summary[:200],
@@ -248,13 +151,10 @@ def scan_news(max_items: int = 50) -> list[dict]:
             })
             seen.add(item_id)
 
-            # Auto-expand: extract capitalized tool/product names from title
-            # and add them to config keywords for future matching
-            _auto_expand_keywords(title, config)
-
-    state["seen_news"] = list(seen)[-200:]
-    # Restore main module state
-    state["seen"] = _main_seen
-    state["last_run"] = _main_last_run
-    _save_state(state)
+    if sources and not succeeded:
+        raise RuntimeError("Every configured RSS source failed; news coverage unavailable")
+    if failed:
+        print(f"NEWS COVERAGE WARNING: {failed} of {len(sources)} feeds unavailable")
+    # Only the caller can mark a news alert delivered after its sink succeeds.
+    # Scanning itself is read-only, including in dry-run mode.
     return alerts
