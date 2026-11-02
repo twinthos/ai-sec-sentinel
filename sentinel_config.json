@@ -48,30 +48,6 @@
     "ai security",
     "adversarial",
     "jailbreak",
-    "IntCyberDigest",
-    "cvedotnow",
-    "CloakdDev",
-    "theinjection",
-    "WizSecurity",
-    "CrowdStrike",
-    "VulnCheck",
-    "LassoSecurity",
-    "EmbracetheRed",
-    "CheckPointResearch",
-    "NCSC",
-    "ICOnews",
-    "GossiTheGod",
-    "BleepingComputer",
-    "KrebsOnSecurity",
-    "smart appliance",
-    "IoT security",
-    "internet of things",
-    "smart device",
-    "connected device",
-    "IoT vulnerability",
-    "smart home",
-    "industrial IoT",
-    "IIoT",
     "aws",
     "gcp",
     "azure",
@@ -85,37 +61,6 @@
   ],
   "monitored_accounts": [
     {
-      "handle": "@IntCyberDigest",
-      "platform": "x",
-      "topics": [
-        "ai-security",
-        "breaches",
-        "nvidia",
-        "openai",
-        "anthropic"
-      ],
-      "rss": []
-    },
-    {
-      "handle": "@cvedotnow",
-      "platform": "x",
-      "topics": [
-        "cve",
-        "exploits",
-        "ai-framework-vulns"
-      ],
-      "rss": []
-    },
-    {
-      "handle": "@CloakdDev",
-      "platform": "x",
-      "topics": [
-        "audit-quality",
-        "ai-security-audit"
-      ],
-      "rss": []
-    },
-    {
       "handle": "@theinjection_dev",
       "platform": "web",
       "topics": [
@@ -125,68 +70,6 @@
       "rss": [
         "https://theinjection.dev/week/feed/"
       ]
-    },
-    {
-      "handle": "@WizSecurity",
-      "platform": "x",
-      "topics": [
-        "cloud-security",
-        "ai-platform-breaches",
-        "supply-chain"
-      ],
-      "rss": []
-    },
-    {
-      "handle": "@CrowdStrike",
-      "platform": "x",
-      "topics": [
-        "threat-intelligence",
-        "state-sponsored",
-        "ai-agents"
-      ],
-      "rss": []
-    },
-    {
-      "handle": "@VulnCheck",
-      "platform": "x",
-      "topics": [
-        "vulnerability-research",
-        "cve",
-        "exploitation"
-      ],
-      "rss": []
-    },
-    {
-      "handle": "@LassoSecurity",
-      "platform": "x",
-      "topics": [
-        "agent-security",
-        "mcp",
-        "prompt-injection"
-      ],
-      "rss": []
-    },
-    {
-      "handle": "@EmbracetheRed",
-      "platform": "x",
-      "topics": [
-        "ai-agent-exploits",
-        "cursor",
-        "copilot",
-        "vscode"
-      ],
-      "rss": []
-    },
-    {
-      "handle": "@CheckPointResearch",
-      "platform": "x",
-      "topics": [
-        "black-hat",
-        "agent-frameworks",
-        "langchain",
-        "crewai"
-      ],
-      "rss": []
     },
     {
       "handle": "@NCSC",
@@ -199,25 +82,6 @@
       "rss": [
         "https://www.ncsc.gov.uk/blog/rss"
       ]
-    },
-    {
-      "handle": "@ICOnews",
-      "platform": "x",
-      "topics": [
-        "uk-gdpr",
-        "ai-fines",
-        "enforcement"
-      ],
-      "rss": []
-    },
-    {
-      "handle": "@GossiTheGod",
-      "platform": "x",
-      "topics": [
-        "enterprise-breaches",
-        "incident-response"
-      ],
-      "rss": []
     },
     {
       "handle": "@BleepingComputer",
@@ -248,51 +112,61 @@
   "news": {
     "enabled": true,
     "keywords": [
-      "brev",
-      "brevlabs",
-      "nvidia",
-      "ai developer platform",
-      "ai platform",
-      "ssh key",
+      "AI agent",
+      "AI agents",
+      "automated attack",
+      "LLM",
+      "prompt injection",
+      "MCP",
+      "agentic",
+      "Kerberoasting",
+      "Active Directory",
       "supply chain",
-      "lambda",
-      "replicate",
-      "hugging face",
-      "anyscale",
-      "together ai",
-      "groq",
-      "fal ai",
-      "modal",
-      "runpod",
-      "vast ai",
-      "paperspace",
-      "coreweave",
-      "GPU cloud",
-      "AI infrastructure",
-      "IntCyberDigest",
-      "cvedotnow",
-      "CloakdDev",
-      "theinjection",
-      "WizSecurity",
-      "CrowdStrike",
-      "VulnCheck",
-      "LassoSecurity",
-      "EmbracetheRed",
-      "CheckPointResearch",
-      "NCSC",
-      "ICOnews",
-      "GossiTheGod",
-      "BleepingComputer",
-      "KrebsOnSecurity",
-      "smart appliance",
-      "IoT security",
-      "internet of things",
-      "smart device",
-      "connected device",
-      "IoT vulnerability",
-      "smart home",
-      "industrial IoT",
-      "IIoT"
+      "weaponized",
+      "AI-powered attack",
+      "AI-powered",
+      "ARTEX",
+      "PentAGI",
+      "CAIRN",
+      "AI red team",
+      "AI penetration",
+      "AI pentesting",
+      "model context protocol",
+      "agent collusion",
+      "RAG poisoning",
+      "model poisoning",
+      "confused deputy",
+      "excessive agency",
+      "AI security",
+      "AI vulnerability",
+      "LLM vulnerability",
+      "AI attack",
+      "AI threat",
+      "AI breach",
+      "AI exploit",
+      "deepseek",
+      "open source AI tool",
+      "AI framework",
+      "agent identity",
+      "agent passport",
+      "agent security",
+      "AI guardrails",
+      "AI safety",
+      "AI risk",
+      "vulnerability",
+      "exploit",
+      "breach",
+      "ransomware",
+      "malware",
+      "zero-day",
+      "0day",
+      "backdoor",
+      "threat actor",
+      "state-sponsored",
+      "APT",
+      "nation-state",
+      "cve",
+      "CVE"
     ],
     "sources": [
       "https://feeds.bbci.co.uk/news/technology/rss.xml",
@@ -303,11 +177,13 @@
       "https://theinjection.dev/week/feed/",
       "https://www.ncsc.gov.uk/blog/rss",
       "https://www.bleepingcomputer.com/feed/",
-      "https://krebsonsecurity.com/feed/"
+      "https://krebsonsecurity.com/feed/",
+      "https://cybersecuritynews.com/feed/",
+      "https://feeds.feedburner.com/TheHackersNews"
     ]
   },
   "telegram": {
-    "enabled": false,
+    "enabled": true,
     "parse_mode": "HTML"
   },
   "deduplication": {

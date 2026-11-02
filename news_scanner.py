@@ -36,6 +36,12 @@ NEWS_SOURCES = [
     "https://www.theverge.com/rss/index.xml",
     "https://techcrunch.com/feed/",
     "https://www.wired.com/feed/rss",
+    "https://cybersecuritynews.com/feed/",
+    "https://feeds.feedburner.com/TheHackersNews",
+    "https://www.bleepingcomputer.com/feed/",
+    "https://krebsonsecurity.com/feed/",
+    "https://theinjection.dev/week/feed/",
+    "https://www.ncsc.gov.uk/blog/rss",
 ]
 
 def _load_config():
@@ -102,6 +108,97 @@ def _is_negative_sentiment(text: str) -> bool:
     ]
     return any(term in text.lower() for term in negative)
 
+_COMMON_WORDS = {
+    "the", "a", "an", "in", "on", "at", "to", "for", "of", "and", "or",
+    "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+    "do", "does", "did", "will", "would", "could", "should", "may", "might",
+    "can", "shall", "must", "need", "dare", "ought", "used", "new", "more",
+    "most", "other", "some", "such", "no", "nor", "not", "only", "own",
+    "same", "so", "than", "too", "very", "just", "because", "as", "until",
+    "while", "about", "against", "between", "into", "through", "during",
+    "before", "after", "above", "below", "from", "up", "down", "out", "off",
+    "over", "under", "again", "further", "then", "once", "here", "there",
+    "when", "where", "why", "how", "all", "each", "few", "both", "any",
+    "hackers", "users", "attack", "attacks", "breach", "breaches", "security",
+    "vulnerability", "vulnerabilities", "exploit", "exploits", "malware",
+    "ransomware", "threat", "threats", "data", "system", "systems", "server",
+    "servers", "network", "networks", "code", "remote", "critical", "high",
+    "medium", "low", "zero", "day", "zero-day", "patch", "patches", "fixed",
+    "flaw", "flaws", "bug", "bugs", "issue", "issues", "using", "used",
+    "could", "lets", "let", "hack", "hacked", "hijack", "steal", "steals",
+    "stealing", "leak", "leaks", "leaking", "expose", "exposed", "exposure",
+    "target", "targets", "targeting", "targeted", "gain", "gains", "access",
+    "accessed", "accessing", "run", "running", "runs", "execute", "executed",
+    "execution", "windows", "linux", "mac", "ios", "android", "web", "api",
+    "apis", "app", "apps", "application", "applications", "service", "services",
+    "account", "accounts", "password", "passwords", "credential", "credentials",
+    "token", "tokens", "key", "keys", "admin", "administrator", "domain",
+    "controller", "controllers", "active", "directory", "kerberos", "kerberoasting",
+    "lateral", "movement", "privilege", "escalation", "privileges", "remote",
+    "code", "execution", "rce", "arbitrary", "unauthenticated", "authenticated",
+    "users", "user", "customer", "customers", "company", "companies",
+    "organization", "organizations", "worldwide", "global", "international",
+    "china", "chinese", "russia", "russian", "north", "korean", "korea",
+    "iran", "iranian", "state", "sponsored", "group", "groups", "actor",
+    "actors", "threat", "threats", "intelligence", "research", "researchers",
+    "report", "reports", "reported", "confirmed", "links", "linked",
+    "million", "billion", "thousand", "hundred", "over", "under", "more",
+    "less", "than", "about", "around", "approximately", "estimated",
+    "new", "old", "latest", "recent", "update", "updated", "updates",
+    "release", "released", "releases", "version", "versions",
+    "ai", "artificial", "intelligence", "machine", "learning", "deep",
+    "neural", "model", "models", "llm", "llms", "gpt", "claude", "gemini",
+    "openai", "anthropic", "google", "microsoft", "meta", "facebook",
+    "apple", "amazon", "aws", "azure", "gcp", "cloud",
+    "open", "source", "tool", "tools", "framework", "frameworks",
+    "platform", "platforms", "agent", "agents", "agentic", "automated",
+    "automation", "autonomous", "autonomy",
+}
+
+
+def _auto_expand_keywords(title: str, config: dict) -> None:
+    """Extract capitalized tool/product names from a title and add to config keywords.
+
+    Looks for capitalized words (3+ chars) that are not common English words.
+    Adds them to config['news']['keywords'] if not already present.
+    Saves config atomically.
+    """
+    import re
+    # Find capitalized words (potential product/tool names)
+    candidates = re.findall(r'\b[A-Z][a-zA-Z0-9]{2,}\b', title)
+    # Also find ALL-CAPS acronyms (3+ chars)
+    candidates += re.findall(r'\b[A-Z]{3,}\b', title)
+
+    new_keywords = []
+    for candidate in candidates:
+        lower = candidate.lower()
+        if lower in _COMMON_WORDS:
+            continue
+        if len(candidate) < 3:
+            continue
+        # Skip if already in keywords
+        existing = [k.lower() for k in config.get("news", {}).get("keywords", [])]
+        if lower not in existing:
+            new_keywords.append(candidate)
+
+    if not new_keywords:
+        return
+
+    # Add to config
+    news_config = config.setdefault("news", {})
+    kw_list = news_config.setdefault("keywords", [])
+    for kw in new_keywords:
+        if kw not in kw_list:
+            kw_list.append(kw)
+
+    # Save config atomically
+    try:
+        config_path = Path(__file__).with_name("sentinel_config.json")
+        atomic_write(config_path, json.dumps(config, indent=2))
+    except Exception:
+        pass
+
+
 def scan_news(max_items: int = 50) -> list[dict]:
     """Scan configured RSS/news sources for threats matching YOUR keywords."""
     if feedparser is None:
@@ -150,6 +247,10 @@ def scan_news(max_items: int = 50) -> list[dict]:
                 "published": entry.get("published", datetime.now(timezone.utc).isoformat()),
             })
             seen.add(item_id)
+
+            # Auto-expand: extract capitalized tool/product names from title
+            # and add them to config keywords for future matching
+            _auto_expand_keywords(title, config)
 
     state["seen_news"] = list(seen)[-200:]
     # Restore main module state
