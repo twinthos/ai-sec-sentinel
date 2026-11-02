@@ -22,8 +22,8 @@ from enum import Enum
 class ObserveLayer:
     """Monitor tool calls, MCP changes, agent behavior, vulnerabilities."""
 
-    def __init__(self, log_dir: str = "guardian_logs"):
-        self.log_dir = Path(log_dir)
+    def __init__(self, log_dir: str = None):
+        self.log_dir = Path(log_dir) if log_dir else Path(os.getenv("SENTINEL_DATA_DIR", ".")) / "guardian_logs"
         self.log_dir.mkdir(exist_ok=True)
         self.events = []
 
@@ -34,8 +34,8 @@ class ObserveLayer:
             "type": "tool_call",
             "agent_id": agent_id,
             "tool_name": tool_name,
-            "params": params,
-            "result": result,
+            "params_summary": {"keys": sorted(map(str, params.keys())), "redacted": True},
+            "result_recorded": result is not None,
             "risk_level": self._assess_risk(tool_name, params),
         }
         self.events.append(event)
@@ -363,12 +363,15 @@ class ControlLayer:
                 return json.loads(self.policy_file.read_text())
             except Exception:
                 pass
+        if self.policy_file.exists():
+            raise ValueError("Guardian policy file is invalid")
+        # Missing policy file: deny all operations until policies are installed.
         return []
 
     def evaluate(self, agent_id: str, tool_name: str, params: dict) -> dict:
         """Evaluate a tool call against policies. Returns allow/warn/ask/block."""
-        decision = "allow"
-        reasons = []
+        decision = "block"
+        reasons = ["No matching explicit allow policy"]
 
         # Check tool-level policies
         for policy in self.policies:
@@ -377,12 +380,21 @@ class ControlLayer:
                     continue
                 condition = policy.get("condition", "always")
                 if self._evaluate_condition(condition, tool_name, params):
-                    decision = policy.get("action", "allow")
+                    action = policy.get("action", "block")
+                    if action not in ("allow", "warn", "ask", "block"):
+                        action = "block"
+                    # A later allow cannot override a previous deny.
+                    priority = {"allow": 0, "warn": 1, "ask": 2, "block": 3}
+                    if reasons == ["No matching explicit allow policy"]:
+                        decision = action
+                        reasons = []
+                    elif priority[action] > priority[decision]:
+                        decision = action
                     reasons.append(policy.get("reason", "Policy match"))
 
         # Default dangerous tool checks
         dangerous_tools = {"shell_exec", "db_query", "http_request", "code_exec", "file_write"}
-        if tool_name in dangerous_tools and decision == "allow":
+        if tool_name in dangerous_tools and decision in ("allow", "warn"):
             decision = "ask"
             reasons.append(f"Dangerous tool '{tool_name}' requires approval")
 
@@ -410,10 +422,15 @@ class ControlLayer:
         if condition == "sensitive_data":
             params_str = json.dumps(params).lower()
             return any(kw in params_str for kw in ["password", "secret", "token", "api_key", "pii"])
-        return False
+        # Unknown condition must never match an allow rule.
+        raise ValueError(f"Unsupported policy condition: {condition}")
 
     def add_policy(self, tool: str, action: str, condition: str = "always", reason: str = "", agent: str = None):
         """Add a policy rule."""
+        if action not in ("allow", "warn", "ask", "block"):
+            raise ValueError("Invalid policy action")
+        if condition not in ("always", "external_destination", "sensitive_data"):
+            raise ValueError("Invalid condition")
         policy = {
             "tool": tool,
             "action": action,
@@ -423,7 +440,9 @@ class ControlLayer:
         if agent:
             policy["agent"] = agent
         self.policies.append(policy)
-        self.policy_file.write_text(json.dumps(self.policies, indent=2))
+        tmp = self.policy_file.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self.policies, indent=2))
+        tmp.replace(self.policy_file)
 
 
 # ── Layer 4: PROVE ────────────────────────────────────────────────
@@ -431,8 +450,12 @@ class ControlLayer:
 class ProveLayer:
     """Evidence ledger — tamper-evident audit trail."""
 
-    def __init__(self, ledger_file: str = "guardian_ledger.jsonl"):
-        self.ledger_file = Path(ledger_file)
+    def __init__(self, ledger_file: str = None):
+        self.ledger_file = Path(ledger_file) if ledger_file else Path(os.getenv("SENTINEL_DATA_DIR", ".")) / "guardian_ledger.jsonl"
+        self.ledger_file.parent.mkdir(parents=True, exist_ok=True)
+        integrity = self.verify_integrity()
+        if integrity.get("status") not in ("empty", "intact"):
+            raise RuntimeError(f"Guardian ledger verification failed: {integrity.get('status')}")
         self.previous_hash = self._get_last_hash()
 
     def _get_last_hash(self) -> str:
@@ -458,20 +481,23 @@ class ProveLayer:
         # Compute hash
         entry_str = json.dumps(entry, sort_keys=True)
         entry["hash"] = hashlib.sha256(entry_str.encode()).hexdigest()
-        self.previous_hash = entry["hash"]
-
-        # Append to ledger
-        with open(self.ledger_file, "a") as f:
+        # Record before advancing the in-memory chain; durable-write errors
+        # must fail the policy evaluation rather than returning a receipt.
+        with open(self.ledger_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
-
+            f.flush()
+            os.fsync(f.fileno())
+        self.previous_hash = entry["hash"]
         return entry
 
     def verify_integrity(self) -> dict:
         """Verify the ledger hasn't been tampered with."""
         if not self.ledger_file.exists():
             return {"status": "empty", "entries": 0}
-
-        lines = self.ledger_file.read_text().strip().split("\n")
+        raw = self.ledger_file.read_text().strip()
+        if not raw:
+            return {"status": "empty", "entries": 0}
+        lines = raw.split("\n")
         entries = []
         for line in lines:
             try:
@@ -484,7 +510,10 @@ class ProveLayer:
         for i, entry in enumerate(entries):
             if entry.get("previous_hash") != prev_hash:
                 return {"status": "tampered", "entry": i, "expected": prev_hash, "got": entry.get("previous_hash")}
-            prev_hash = entry.get("hash", "")
+            expected_hash = hashlib.sha256(json.dumps({k: v for k, v in entry.items() if k != "hash"}, sort_keys=True).encode()).hexdigest()
+            if entry.get("hash") != expected_hash:
+                return {"status": "tampered", "entry": i, "error": "Entry hash mismatch"}
+            prev_hash = expected_hash
 
         return {"status": "intact", "entries": len(entries)}
 
@@ -521,6 +550,10 @@ class SentinelGuardian:
 
     def process_tool_call(self, agent_id: str, tool_name: str, params: dict) -> dict:
         """Process a tool call through all four layers."""
+        # Registration is descriptive only; use trusted adapter identity at execution.
+        registered = self.understand.agents.get(agent_id)
+        if not registered or tool_name not in registered.get("tools", []):
+            raise PermissionError("Unregistered agent or unauthorized tool")
         # 1. OBSERVE
         event = self.observe.log_tool_call(agent_id, tool_name, params)
 
@@ -533,7 +566,8 @@ class SentinelGuardian:
         # 4. PROVE
         ledger_entry = self.prove.record("tool_call", agent_id, {
             "tool": tool_name,
-            "params": params,
+            "params_keys": sorted(map(str, params.keys())),
+            "params_redacted": True,
             "decision": decision["decision"],
             "risk_level": event["risk_level"],
             "blast_radius": blast.get("risk_score", 0) if blast else 0,

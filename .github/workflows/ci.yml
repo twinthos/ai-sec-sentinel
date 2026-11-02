@@ -1,13 +1,76 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
+    name: Python ${{ matrix.python }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.13']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
         with:
-          python-version: '3.11'
-      - run: pip install -r requirements.txt
-      - run: python3 ai_sec_sentinel.py --version
-      - run: python3 -m unittest tests.test_sentinel_core -v
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Reject tracked private files and high-confidence credentials
+        run: python tools/check_repo_exposure.py
+      - name: Compile Python sources
+        run: python -m compileall -q .
+      - name: Run offline security regression tests
+        run: python -B -m unittest discover -s tests -v
+      - name: Test actual MCP stdio boundary against forbidden tool calls
+        run: python -m unittest discover -s tests -p 'test_mcp_reference_server.py' -v
+      - name: Test offline ARTEX-era cloud audit triage
+        run: python -m unittest discover -s tests -p 'test_defensive_event_triage.py' -v
+      - name: Verify synthetic MCP and cloud triage demo
+        run: |
+          python3 examples/proof.py > sentinel-proof.json
+          python3 -c "import json; d=json.load(open('sentinel-proof.json')); assert d['pass'] and all(d['checks'].values())"
+          python3 defensive_event_triage.py --input examples/fixtures/synthetic_cloud_events.jsonl > sentinel-triage.json
+          python3 -c "import json; d=json.load(open('sentinel-triage.json')); assert len(d['signals']) >= 2 and not d['source_identifiers_included']"
+      - name: Publish synthetic evidence artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentinel-synthetic-evidence-${{ matrix.python }}
+          path: |
+            sentinel-proof.json
+            sentinel-triage.json
+          retention-days: 7
+      - name: Prove scoped allow/deny enforcement
+        run: python reference_adapter.py --demo
+      - name: Verify CLI metadata
+        run: python ai_sec_sentinel.py --version
+
+  container:
+    name: Container and Compose smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Validate Compose configuration
+        run: docker compose config -q
+      - name: Build container from repository
+        run: docker build -t twinthos-sentinel-ci:local .
+      - name: Verify container CLI entry
+        run: docker run --rm --entrypoint python3 twinthos-sentinel-ci:local ai_sec_sentinel.py --version
+      - name: Empty runtime must not report healthy
+        run: |
+          if docker run --rm --entrypoint python3 twinthos-sentinel-ci:local ai_sec_sentinel.py --health; then
+            echo "ERROR: an uninitialized scanner claimed healthy"
+            exit 1
+          fi

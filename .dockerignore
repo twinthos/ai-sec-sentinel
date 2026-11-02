@@ -12,3 +12,11 @@ Dockerfile
 CONTRIBUTING.md
 LICENSE
 README.md
+
+data/
+guardian_ledger.jsonl
+guardian_logs/
+guardian_policy.json
+*.toolsnapshot
+.env
+.venv/
