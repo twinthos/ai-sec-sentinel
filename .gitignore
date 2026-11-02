@@ -22,3 +22,9 @@ guardian_ledger.jsonl
 guardian_ledger.jsonl
 state.json
 *.jsonl
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+sentinel_alerts.db
