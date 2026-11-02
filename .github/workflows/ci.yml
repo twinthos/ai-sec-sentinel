@@ -25,6 +25,8 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Install runtime dependencies
         run: python -m pip install -r requirements.txt
+      - name: Reject tracked private files and high-confidence credentials
+        run: python tools/check_repo_exposure.py
       - name: Compile Python sources
         run: python -m compileall -q .
       - name: Run offline security regression tests
