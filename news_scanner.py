@@ -61,10 +61,34 @@ def _save_state(state: dict):
     state_path = Path(__file__).with_name("sentinel_state.json")
     atomic_write(state_path, json.dumps(state, indent=2))
 
+def _normalize_text(text: str) -> str:
+    """Normalize text to catch evasion attempts.
+
+    Handles:
+    - Leetspeak (1->i, 0->o, 3->e, 4->a, 5->s, 7->t, 8->b)
+    - Unicode normalization (non-English homoglyphs)
+    - Zero-width character removal
+    - Case folding
+    """
+    if not text:
+        return ""
+    # Remove zero-width and invisible characters
+    text = re.sub(r'[\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff]', '', text)
+    # Unicode normalization (NFKC) — catches homoglyphs
+    import unicodedata
+    text = unicodedata.normalize("NFKC", text)
+    # Leetspeak normalization
+    leet_map = str.maketrans("0134578", "oieasbt")
+    text = text.translate(leet_map)
+    # Case fold (handles ß -> ss, etc.)
+    text = text.casefold()
+    return text
+
+
 def _matches_keywords(entry_text: str, keywords: list[str]) -> bool:
-    text = entry_text.lower()
+    text = _normalize_text(entry_text)
     for kw in keywords:
-        pattern = r"\b" + re.escape(kw.lower()) + r"\b"
+        pattern = r"\b" + re.escape(_normalize_text(kw)) + r"\b"
         if re.search(pattern, text):
             return True
     return False

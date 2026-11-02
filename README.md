@@ -1,21 +1,19 @@
 # Twinthos Sentinel
 
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/12345/badge)](https://www.bestpractices.dev/projects/12345)
-
 > OSPS Baseline Level 1 — in progress. See SECURITY.md for disclosure policy.
 
-Continuous threat intelligence for organisations running AI agents and automation.
+Continuous threat intelligence for organisations running AI agents and automation. Watches CVE feeds, CISA KEV, EPSS, and news so you don't have to.
 
 ## Alert channels
 
 | Channel | Cost | Setup |
-|---------|------|-------|
+|---|---|---|
 | Telegram | Free | @BotFather token + chat ID |
 | Slack | Free | Webhook URL |
 | Discord | Free | Webhook URL |
 | iMessage (Sendblue) | Paid (~$20/mo) | Sendblue API key + secret + recipient number |
 
-## What it does (working features)
+## What works right now
 
 - **CVE monitoring**: Fetches NVD, CISA KEV, and GitHub Security Advisories. Filters to your stack via keyword matching.
 - **Telegram alerts**: Delivers findings with retry queue (SQLite-backed, WAL mode). Failed alerts survive restarts.

@@ -27,8 +27,21 @@ import re
 import signal
 import sys
 import time
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+
+def _normalize_text(text: str) -> str:
+    """Normalize text to catch evasion attempts (synonym, leetspeak, non-English)."""
+    if not text:
+        return ""
+    text = re.sub(r'[\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff]', '', text)
+    text = unicodedata.normalize("NFKC", text)
+    leet_map = str.maketrans("0134578", "oieasbt")
+    text = text.translate(leet_map)
+    text = text.casefold()
+    return text
 
 try:
     import requests
@@ -190,8 +203,11 @@ def record_feedback(cve_id: str, action: str):
 
 def _word_boundary(text: str, kw: str) -> bool:
     """Match keyword as a whole word, not a substring."""
-    pattern = r"\b" + re.escape(kw) + r"\b"
-    return re.search(pattern, text, re.IGNORECASE) is not None
+    # Normalize both text and keyword to catch evasion
+    norm_text = _normalize_text(text) if '_normalize_text' in globals() else text.lower()
+    norm_kw = _normalize_text(kw) if '_normalize_text' in globals() else kw.lower()
+    pattern = r"\b" + re.escape(norm_kw) + r"\b"
+    return re.search(pattern, norm_text) is not None
 
 # Synonym map: alternate spellings / product names (only non-trivial variants)
 AI_SYNONYMS = {
@@ -857,27 +873,37 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
     alerts_sent = 0
     vulns = []
 
-    # Lockfile scan
+    # Lockfile scan (async — runs in background thread so feed scan stays responsive)
     lockfile = config.get("lockfile")
     ecosystem = config.get("ecosystem", "python")
     if lockfile:
-        # Consent check for uploading lockfile to cve.now
-        if not config.get("allow_lockfile_upload", False):
-            print(f"Lockfile scan (offline only): {lockfile} — set allow_lockfile_upload=true to use cve.now API")
-            vulns = _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem)
-        else:
-            print(f"Scanning lockfile: {lockfile}")
-            vulns = check_lockfile(lockfile, ecosystem)
-        if vulns:
-            msg = f"🔍 Lockfile scan: <b>{len(vulns)} AI-related vulnerabilities</b> in {Path(lockfile).name}\n"
-            for v in vulns[:10]:
-                msg += f"• {v.get('id', 'N/A')}\n"
-                fix_cmd = generate_fix_command(v, ecosystem)
-                if fix_cmd:
-                    msg += f"  → Fix: <code>{html.escape(fix_cmd)}</code>\n"
-            send_telegram(msg, token, chat)
-        else:
-            send_telegram(f"✅ Lockfile clean: {Path(lockfile).name}", token, chat)
+        import threading
+
+        def _bg_lockfile_scan():
+            try:
+                # Consent check for uploading lockfile to cve.now
+                if not config.get("allow_lockfile_upload", False):
+                    print(f"Lockfile scan (offline only): {lockfile} — set allow_lockfile_upload=true to use cve.now API")
+                    vulns_local = _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem)
+                else:
+                    print(f"Scanning lockfile: {lockfile}")
+                    vulns_local = check_lockfile(lockfile, ecosystem)
+                if vulns_local:
+                    msg = f"🔍 Lockfile scan: <b>{len(vulns_local)} AI-related vulnerabilities</b> in {Path(lockfile).name}\n"
+                    for v in vulns_local[:10]:
+                        msg += f"• {v.get('id', 'N/A')}\n"
+                        fix_cmd = generate_fix_command(v, ecosystem)
+                        if fix_cmd:
+                            msg += f"  → Fix: <code>{html.escape(fix_cmd)}</code>\n"
+                    send_telegram(msg, token, chat)
+                else:
+                    send_telegram(f"✅ Lockfile clean: {Path(lockfile).name}", token, chat)
+            except Exception as e:
+                print(f"Lockfile scan error: {e}")
+
+        t = threading.Thread(target=_bg_lockfile_scan, daemon=True)
+        t.start()
+        # Don't block — feed scan continues in parallel
 
     # Feed watch
     print("Scanning cve.now feed...")
@@ -1358,17 +1384,46 @@ def _webhook_server(token: str, port: int = 8080, secret: str = ""):
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
-            # Verify secret token
+            # Verify secret token (Telegram)
             if secret:
                 provided = self.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
                 if provided != secret:
-                    self.send_response(403)
-                    self.end_headers()
-                    self.wfile.write(b"Forbidden")
-                    return
+                    # Check if it's a GitHub webhook (different secret header)
+                    gh_secret = self.headers.get("X-Hub-Signature-256", "")
+                    if not gh_secret:
+                        self.send_response(403)
+                        self.end_headers()
+                        self.wfile.write(b"Forbidden")
+                        return
             try:
                 length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(length)
+                # Detect event type
+                event_type = self.headers.get("X-GitHub-Event", "")
+                if event_type == "push":
+                    # GitHub push event → trigger scan
+                    import json as _json
+                    try:
+                        payload = _json.loads(body)
+                        repo = payload.get("repository", {}).get("full_name", "unknown")
+                        print(f"GitHub push event from {repo} — triggering scan")
+                    except Exception:
+                        pass
+                    # Trigger scan in background
+                    import threading
+
+                    def _bg_scan():
+                        try:
+                            cfg = load_config() if 'load_config' in globals() else {}
+                            run_scan(cfg, token, "")
+                        except Exception as e:
+                            print(f"Scan trigger error: {e}")
+
+                    threading.Thread(target=_bg_scan, daemon=True).start()
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b"Scan triggered")
+                    return
                 update = json.loads(body)
                 _handle_callback_query(update, token)
                 self.send_response(200)

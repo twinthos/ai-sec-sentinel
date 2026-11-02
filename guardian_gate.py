@@ -116,11 +116,40 @@ class GateHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/health":
             integrity = guardian.prove.verify_integrity()
+            # Watchdog: check scanner health
+            scanner_health = "unknown"
+            try:
+                import json as _json
+                from pathlib import Path as _Path
+                state_file = _Path("sentinel_state.json")
+                if state_file.exists():
+                    state = _json.loads(state_file.read_text())
+                    last_run = state.get("last_run", "")
+                    if last_run:
+                        from datetime import datetime, timezone
+                        try:
+                            lr = datetime.fromisoformat(last_run.replace("Z", "+00:00"))
+                            age = (datetime.now(timezone.utc) - lr).total_seconds()
+                            if age < 3600:
+                                scanner_health = "healthy"
+                            elif age < 86400:
+                                scanner_health = "stale"
+                            else:
+                                scanner_health = "dead"
+                        except ValueError:
+                            scanner_health = "unknown"
+                    else:
+                        scanner_health = "never_run"
+                else:
+                    scanner_health = "no_state_file"
+            except Exception:
+                scanner_health = "error"
             self._respond(200, {
                 "status": "ok",
                 "agents": len(guardian.understand.agents),
                 "events": len(guardian.observe.events),
                 "ledger": integrity,
+                "scanner_health": scanner_health,
             })
         elif path == "/status":
             self._respond(200, guardian.get_status())
