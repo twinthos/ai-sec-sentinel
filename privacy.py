@@ -45,23 +45,39 @@ def redact_text(text: str) -> str:
 
 
 def redact_dict(d: dict, depth: int = 0) -> dict:
-    """Redact secrets from a dictionary recursively."""
-    if depth > 10:
-        return d
-    result = {}
-    for k, v in d.items():
-        key_lower = k.lower()
-        if any(s in key_lower for s in ["password", "secret", "token", "key", "credential", "auth"]):
-            result[k] = "[REDACTED]"
-        elif isinstance(v, dict):
-            result[k] = redact_dict(v, depth + 1)
-        elif isinstance(v, str):
-            result[k] = redact_text(v)
-        elif isinstance(v, list):
-            result[k] = [redact_dict(i, depth + 1) if isinstance(i, dict) else redact_text(i) if isinstance(i, str) else i for i in v]
-        else:
-            result[k] = v
-    return result
+    """Recursively mask sensitive values, including lists within lists.
+
+    A depth limit or cyclic container is replaced with an explicit marker, not
+    returned unchanged. This is best-effort privacy hygiene, not DLP assurance.
+    """
+    active = set()
+
+    def scrub(value, level):
+        if level > 10:
+            return "[REDACTED: nesting limit]"
+        if isinstance(value, (dict, list, tuple)):
+            identity = id(value)
+            if identity in active:
+                return "[REDACTED: cyclic container]"
+            active.add(identity)
+            try:
+                if isinstance(value, dict):
+                    cleaned = {}
+                    for k, v in value.items():
+                        key_lower = str(k).lower()
+                        if any(word in key_lower for word in ("password", "secret", "token", "key", "credential", "auth")):
+                            cleaned[k] = "[REDACTED]"
+                        else:
+                            cleaned[k] = scrub(v, level + 1)
+                    return cleaned
+                return [scrub(item, level + 1) for item in value]
+            finally:
+                active.remove(identity)
+        if isinstance(value, str):
+            return redact_text(value)
+        return value
+
+    return scrub(d, depth)
 
 
 def is_sensitive_file(path: str) -> bool:

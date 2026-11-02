@@ -32,7 +32,7 @@ def safe_relative_path(path: object) -> bool:
     """Refuse hidden/secret-like paths before opening a file (defence in depth)."""
     if not isinstance(path, str) or not (1 <= len(path) <= 1024):
         return False
-    if path.startswith("/") or "\\" in path or "\x00" in path:
+    if path.startswith("/") or "\\" in path or "\x00" in path or any(ord(ch) < 32 or ord(ch) == 127 for ch in path):
         return False
     components = path.split("/")
     if any(not part or part in (".", "..") or part.startswith(".") for part in components):
@@ -80,7 +80,7 @@ class ReferenceMCP:
             return self.error(request_id, -32602, "Parameters must be an object")
         if method == "initialize":
             requested = params.get("protocolVersion")
-            if requested not in SUPPORTED_PROTOCOLS:
+            if not isinstance(requested, str) or requested not in SUPPORTED_PROTOCOLS:
                 return self.error(request_id, -32602, "Unsupported protocol version")
             self.initialized = False
             self.handshake_complete = True

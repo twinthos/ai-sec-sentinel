@@ -51,7 +51,9 @@ def analyse(events, min_failures=20, min_accounts=5, min_tenants=2):
         accepted.append((stamp, row))
     accepted.sort(key=lambda x: x[0])
     history = defaultdict(deque)
-    alerted_sources = set()
+    # Throttle per source per window, not for the lifetime of the whole dataset.
+    # Otherwise a second independent campaign from the same IP disappears.
+    last_alert_at = {}
     signals = []
     for stamp, row in accepted:
         kind = row["event"]
@@ -74,12 +76,13 @@ def analyse(events, min_failures=20, min_accounts=5, min_tenants=2):
         while q and stamp - q[0][0] > WINDOW:
             q.popleft()
         q.append((stamp, principal, tenant))
-        if ip in alerted_sources:
+        previous = last_alert_at.get(ip)
+        if previous is not None and stamp - previous < WINDOW:
             continue
         users = {e[1] for e in q}
         tenants = {e[2] for e in q}
         if len(q) >= min_failures and len(users) >= min_accounts and len(tenants) >= min_tenants:
-            alerted_sources.add(ip)
+            last_alert_at[ip] = stamp
             signals.append({
                 "type": "cross_tenant_signin_burst",
                 "utc": stamp.isoformat(),
