@@ -13,7 +13,7 @@ This repository focuses on two **different** tasks. The threat-intelligence scan
 
 **Reproducible:** offline unit tests, a bounded POSIX file-reading adapter, an actual MCP stdio subprocess proof, container smoke checks, and synthetic cloud audit triage.
 
-**Not established:** live protection of Hermes/Orgo or an enterprise tenant, independent penetration testing, full Microsoft 365 telemetry integration, guaranteed incident alerts, certified compliance, breach prevention, or production support.
+**Not established:** live protection of a full agent runtime or an enterprise tenant, independent penetration testing, full Microsoft 365 telemetry integration, guaranteed incident alerts, certified compliance, breach prevention, or production support.
 
 A separate SQLite alert-queue module is present. Runtime queue files may include message payloads; the default now belongs outside the checkout under a private user data directory. The queue is not evidence that end-to-end delivery or a customer deployment has been tested.
 
@@ -51,7 +51,7 @@ Scope: this read-only adapter only; NOT a universal agent firewall.
 
 The adapter deliberately supports **only** bounded UTF-8 file reads within an explicitly configured workspace. It has no shell, write or network API. It rejects unknown operations, parent-directory traversal and symlinks, treats `ask` as denied, and records a decision before returning file contents. It uses POSIX directory file descriptors and no-follow flags to avoid relying on string path checks alone.
 
-The reference adapter does **not** automatically protect Hermes, Orgo, MCP clients or any general AI agent. Those systems need a real integration with an unavoidable tool boundary and no alternate routes to the same privileges.
+The reference adapter does **not** automatically protect arbitrary MCP clients or full AI agent runtimes. Those systems need a real integration with an unavoidable tool boundary and no alternate routes to the same privileges.
 
 Run the full offline test suite:
 
