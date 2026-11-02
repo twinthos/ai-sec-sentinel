@@ -19,6 +19,9 @@ PORT = int(os.getenv("GUARDIAN_PORT", "8098"))
 HOST = os.getenv("GUARDIAN_HOST", "127.0.0.1")
 GATE_API_KEY = os.getenv("GUARDIAN_API_KEY", "")
 ADMIN_API_KEY = os.getenv("GUARDIAN_ADMIN_API_KEY", "")
+# Bind the shared API credential to one identity configured by the trusted host.
+# Never let a request body select a more privileged registered agent.
+GATE_AGENT_ID = os.getenv("GUARDIAN_AGENT_ID", "").strip()
 MAX_BODY_BYTES = 64 * 1024
 
 guardian = SentinelGuardian()
@@ -30,6 +33,12 @@ class GateHandler(BaseHTTPRequestHandler):
         key = ADMIN_API_KEY if admin else GATE_API_KEY
         expected = "Bearer " + key
         return bool(key) and hmac.compare_digest(auth, expected)
+
+    def _bound_agent(self, agent_id):
+        if not GATE_AGENT_ID or agent_id != GATE_AGENT_ID:
+            self._respond(403, {"error": "Agent identity not authorized for this credential"})
+            return False
+        return True
 
     def _read_json(self):
         raw_length = self.headers.get("Content-Length", "")
@@ -71,6 +80,9 @@ class GateHandler(BaseHTTPRequestHandler):
         agent_id = data.get("agent_id", "")
         if not isinstance(agent_id, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", agent_id):
             self._respond(400, {"error": "Invalid agent_id"})
+            return
+
+        if path in ("/evaluate", "/passport") and not self._bound_agent(agent_id):
             return
 
         if path == "/evaluate":
@@ -123,9 +135,10 @@ class GateHandler(BaseHTTPRequestHandler):
         self._respond(200, guardian.understand.get_passport(agent_id))
 
     def do_GET(self):
-        if not self._authorized():
-            return
         path = urlparse(self.path).path
+        # Full agent status is an administrator operation; /health is read-only.
+        if not self._authorized(admin=(path == "/status")):
+            return
         if path == "/health":
             integrity = guardian.prove.verify_integrity()
             self._respond(200 if integrity.get("status") in ("intact", "empty") else 503, {
@@ -165,11 +178,19 @@ class GateHandler(BaseHTTPRequestHandler):
         pass
 
 
-if __name__ == "__main__":
+def validate_configuration():
+    if HOST not in ("127.0.0.1", "::1", "localhost"):
+        raise SystemExit("Guardian Gate must bind to loopback; terminate TLS in a separate authenticated proxy")
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", GATE_AGENT_ID):
+        raise SystemExit("Set GUARDIAN_AGENT_ID to the one trusted agent identity allowed by this API credential")
     if not GATE_API_KEY or len(GATE_API_KEY) < 24:
         raise SystemExit("Set GUARDIAN_API_KEY (at least 24 characters) before starting Guardian Gate")
     if ADMIN_API_KEY and (len(ADMIN_API_KEY) < 24 or hmac.compare_digest(ADMIN_API_KEY, GATE_API_KEY)):
         raise SystemExit("GUARDIAN_ADMIN_API_KEY must be distinct from GUARDIAN_API_KEY and at least 24 characters")
+
+
+if __name__ == "__main__":
+    validate_configuration()
     server = HTTPServer((HOST, PORT), GateHandler)
     print(f"Guardian policy API listening on {HOST}:{PORT} (authenticated)")
     server.serve_forever()

@@ -99,6 +99,10 @@ The Docker image runs as a non-root user and stores runtime data in the `/data` 
 
 The optional `guardian_gate.py` API and `dashboard.py` are **separate processes**, loopback-only by default, and require their own secrets. Guardian registration requires a distinct admin key. Do not expose either service directly to the Internet.
 
+## Reproducible security and portfolio review
+
+See [the evidence-led case study](docs/SECURITY-AND-CAREER.md) for an honest threat-to-test mapping, the limits of the demo, and what a security hiring manager can reproduce. Guardian Gate now requires \`GUARDIAN_AGENT_ID\` (a host-set identity) before answering evaluation or passport requests. An authenticated API decision is **not** a substitute for enforcement at the real tool boundary.
+
 ## What the project does not prove
 
 **An allow/deny API response is not enforcement.** The model may still be able to reach tools by another path. `reference_adapter.py` shows what enforcement looks like for one deliberately limited capability; it does not secure an unrestricted runtime.
