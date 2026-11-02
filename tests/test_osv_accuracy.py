@@ -9,7 +9,7 @@ from ai_sec_sentinel import _osv_lockfile_check
 class OsVTests(unittest.TestCase):
     @patch("ai_sec_sentinel.requests.post")
     def test_clean_osv_response_produces_no_findings(self, post):
-        response = Mock()
+        response = Mock(status_code=200)
         response.json.return_value = {"vulns": []}
         post.return_value = response
         findings = _osv_lockfile_check(Path("requirements.txt"), "langchain==2.10.0\n", "python")
@@ -24,7 +24,7 @@ class OsVTests(unittest.TestCase):
 
     @patch("ai_sec_sentinel.requests.post")
     def test_api_reported_vulnerability_is_retained(self, post):
-        response = Mock()
+        response = Mock(status_code=200)
         response.json.return_value = {"vulns": [{
             "id": "GHSA-example",
             "affected": [{"ranges": [{"events": [{"introduced": "0"}, {"fixed": "2.10.1"}]}]}],
@@ -37,7 +37,7 @@ class OsVTests(unittest.TestCase):
 
     @patch("ai_sec_sentinel.requests.post")
     def test_npm_v3_lockfile(self, post):
-        response = Mock()
+        response = Mock(status_code=200)
         response.json.return_value = {"vulns": []}
         post.return_value = response
         payload = json.dumps({"packages": {"node_modules/@langchain/core": {"version": "1.2.3"}}})

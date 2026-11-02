@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
+      - name: Verify dependency-free MCP proof
+        run: python examples/proof.py
       - name: Install runtime dependencies
         run: python -m pip install -r requirements.txt
       - name: Reject tracked private files and high-confidence credentials
@@ -51,6 +53,10 @@ jobs:
           retention-days: 7
       - name: Prove scoped allow/deny enforcement
         run: python reference_adapter.py --demo
+      - name: Verify friendly first run
+        run: |
+          python ai_sec_sentinel.py
+          python ai_sec_sentinel.py --quickstart
       - name: Verify CLI metadata
         run: python ai_sec_sentinel.py --version
 
@@ -70,7 +76,9 @@ jobs:
         run: docker run --rm --entrypoint python3 twinthos-sentinel-ci:local ai_sec_sentinel.py --version
       - name: Empty runtime must not report healthy
         run: |
-          if docker run --rm --entrypoint python3 twinthos-sentinel-ci:local ai_sec_sentinel.py --health; then
-            echo "ERROR: an uninitialized scanner claimed healthy"
+          status=0
+          docker run --rm --entrypoint python3 twinthos-sentinel-ci:local ai_sec_sentinel.py --health || status=$?
+          if [ "$status" -ne 2 ]; then
+            echo "ERROR: expected uninitialized health exit 2, got $status"
             exit 1
           fi

@@ -20,6 +20,7 @@ Usage:
 """
 
 import argparse
+from privacy import redact_text, is_sensitive_file
 import html
 import json
 import os
@@ -60,7 +61,7 @@ CVE_NOW_FEED = "https://cve.now/feed?format=json"
 CVE_NOW_API = "https://cve.now/api/v1/entries"
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 EPSS_API = "https://api.first.org/data/v1/epss"
-DATA_DIR = Path(os.getenv("SENTINEL_DATA_DIR", str(Path(__file__).parent)))
+DATA_DIR = Path(os.getenv("SENTINEL_DATA_DIR") or (Path.home() / ".local" / "share" / "twinthos-sentinel"))
 STATE_FILE = DATA_DIR / "sentinel_state.json"
 CONFIG_FILE = Path(__file__).with_name("sentinel_config.json")
 FEEDBACK_FILE = DATA_DIR / "sentinel_feedback.json"
@@ -153,7 +154,7 @@ def atomic_write(path, data):
     """Atomically replace a state file; do not expose user content to other users."""
     import tempfile
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as out:
@@ -474,6 +475,7 @@ def format_alert(entry: dict, epss_score: float | None = None, in_kev: bool = Fa
 
 def send_webhook(message: str, webhook_url: str, platform: str = "slack") -> bool:
     """Send alert to Slack or Discord webhook."""
+    message = redact_text(message)
     if not webhook_url:
         return False
     if os.getenv("SENTINEL_DRY_RUN") == "1":
@@ -503,14 +505,15 @@ def send_webhook(message: str, webhook_url: str, platform: str = "slack") -> boo
             payload = {"content": clean}
         else:
             payload = {"text": clean}
-        r = requests.post(webhook_url, json=payload, timeout=15, verify=True)
+        r = requests.post(webhook_url, json=payload, timeout=15, verify=True, allow_redirects=False)
         return r.status_code in (200, 204)
     except Exception as e:
-        print(f"Webhook send failed: {e}")
+        print(f"Webhook send failed: {type(e).__name__}")
         return False
 
 
 def send_telegram(message: str, token: str, chat_id: str, cve_id: str = "") -> bool:
+    message = redact_text(message)
     if os.getenv("SENTINEL_DRY_RUN") == "1":
         print(f"[DRY-RUN Telegram] {message[:500]}")
         return True
@@ -538,22 +541,26 @@ def send_telegram(message: str, token: str, chat_id: str, cve_id: str = "") -> b
                     ]
                 ]
             }
-        r = requests.post(url, json=payload, timeout=15, verify=True)
+        r = requests.post(url, json=payload, timeout=15, verify=True, allow_redirects=False)
         if r.status_code == 429:
             retry_after = r.json().get("parameters", {}).get("retry_after", 5)
             print(f"Telegram rate limited, waiting {retry_after}s")
             time.sleep(retry_after)
-            r = requests.post(url, json=payload, timeout=15, verify=True)
+            r = requests.post(url, json=payload, timeout=15, verify=True, allow_redirects=False)
         ok = r.status_code == 200 and r.json().get("ok")
         print(f"Telegram: {'sent' if ok else 'failed'} ({r.status_code})")
         return ok
     except Exception as e:
-        print(f"Telegram error: {e}")
+        print(f"Telegram error: {type(e).__name__}")
         return False
 
 
-def check_lockfile(lockfile_path: str, ecosystem: str) -> list[dict]:
+def check_lockfile(lockfile_path: str, ecosystem: str, *, consent: bool = False) -> list[dict]:
+    if consent is not True:
+        raise ValueError("Raw lockfile upload requires explicit consent")
     path = Path(lockfile_path)
+    if path.is_symlink() or is_sensitive_file(str(path)):
+        raise ValueError("Refusing to upload a sensitive file or symlink")
     if not path.exists():
         print(f"Lockfile not found: {lockfile_path}")
         return []
@@ -565,6 +572,7 @@ def check_lockfile(lockfile_path: str, ecosystem: str) -> list[dict]:
             data=content.encode("utf-8"),
             headers={"X-Lockfile-Name": path.name, "Content-Type": "application/octet-stream"},
             timeout=30,
+            allow_redirects=False,
         )
         if r.status_code == 200:
             data = r.json()
@@ -575,7 +583,7 @@ def check_lockfile(lockfile_path: str, ecosystem: str) -> list[dict]:
             ]
             return ai_vulns
     except Exception as e:
-        print(f"Lockfile API error: {e}")
+        print(f"Lockfile API error: {type(e).__name__}")
 
     # OSV.dev fallback: query OSV for known vulnerabilities
     return _osv_lockfile_check(path, content, ecosystem)
@@ -841,8 +849,11 @@ def _osv_lockfile_check(path: Path, content: str, ecosystem: str, strict: bool =
                 "https://api.osv.dev/v1/query",
                 json={"package": {"name": package, "ecosystem": osv_ecosystem}, "version": version},
                 timeout=15,
+                allow_redirects=False,
             )
             response.raise_for_status()
+            if response.status_code != 200:
+                raise ValueError("OSV did not return a successful response")
             data = response.json()
             for vuln in data.get("vulns", []):
                 fixes = []
@@ -904,11 +915,11 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
     if lockfile:
         # Consent check for uploading lockfile to cve.now
         if not config.get("allow_lockfile_upload", False):
-            print(f"Lockfile scan (offline only): {lockfile} — set allow_lockfile_upload=true to use cve.now API")
+            print(f"Lockfile scan (package names and versions sent to OSV): {lockfile} — set allow_lockfile_upload=true to use cve.now API")
             vulns = _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem, strict=True)
         else:
             print(f"Scanning lockfile: {lockfile}")
-            vulns = check_lockfile(lockfile, ecosystem)
+            vulns = check_lockfile(lockfile, ecosystem, consent=config.get("allow_lockfile_upload") is True)
         if vulns:
             msg = f"🔍 Lockfile scan: <b>{len(vulns)} AI-related vulnerabilities</b> in {Path(lockfile).name}\n"
             for v in vulns[:10]:
@@ -1134,6 +1145,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
 
 def main():
     parser = argparse.ArgumentParser(description="Twinthos Sentinel — continuous threat intelligence")
+    parser.add_argument("--quickstart", action="store_true", help="Verify the local tool boundary with synthetic data; no accounts or network needed")
     parser.add_argument("--version", action="version", version="Twinthos Sentinel v1.4.1")
     parser.add_argument("--lockfile", help="Path to lockfile")
     parser.add_argument("--ecosystem", choices=["python", "npm", "rust", "go", "ruby", "php", "dotnet"])
@@ -1160,7 +1172,29 @@ def main():
     parser.add_argument("--demo", action="store_true", help="Run all checks in sequence (demo mode)")
     parser.add_argument("--guardian", action="store_true", help="Run Sentinel Guardian demo (agent security control plane)")
     parser.add_argument("--passport", metavar="AGENT_ID", help="Show agent passport (blast radius, permissions)")
+    if len(sys.argv) == 1:
+        print("Start here: python3 ai_sec_sentinel.py --quickstart")
+        print("Runs a local demonstration using synthetic files. No account needed.")
+        print("For live feed previews and other options, use --help.")
+        return 0
     args = parser.parse_args()
+    if args.quickstart:
+        if sys.argv[1:] != ["--quickstart"]:
+            parser.error("use --quickstart alone; live options belong in a separate command")
+        from examples.proof import prove
+        try:
+            checks = prove()
+        except Exception:
+            print("CHECK FAILED: local demonstration could not complete. Run the offline test suite for diagnosis.")
+            return 1
+        if not checks or not all(checks.values()):
+            print("CHECK FAILED: the local tool boundary did not pass every check.")
+            return 1
+        print("PASS: an approved file was read; shell calls and private paths were blocked.")
+        print("Used temporary synthetic files only. No live scan or notification was sent.")
+        print("This verifies the included read-only tool. Other agents need their own integration.")
+        print("Next: see README.md for local cloud-event triage or a public-feed preview.")
+        return 0
 
     # Load config
     config = load_config()

@@ -48,7 +48,7 @@ def _load_config():
     return {}
 
 def _load_state():
-    state_path = Path(__import__("os").environ.get("SENTINEL_DATA_DIR", Path(__file__).parent)) / "sentinel_state.json"
+    state_path = Path(__import__("os").environ.get("SENTINEL_DATA_DIR") or (Path.home() / ".local" / "share" / "twinthos-sentinel")) / "sentinel_state.json"
     if state_path.exists():
         try:
             return json.loads(state_path.read_text(encoding="utf-8"))

@@ -1,145 +1,110 @@
 # Twinthos Sentinel
 
-**A small, inspectable AI security project: public vulnerability monitoring, a scoped MCP tool-enforcement demonstration and offline cloud-audit triage.**
+**Give an agent one useful tool. Prove where its permissions stop.**
 
 [![CI](https://github.com/twinthos/ai-sec-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/twinthos/ai-sec-sentinel/actions/workflows/ci.yml)
-[Security policy](SECURITY.md) · [Threat model](docs/THREAT_MODEL.md) · [Engineering evidence](docs/EVIDENCE.md) · [Twinthos](https://twinthos.com/security/)
+[MIT licensed](LICENSE) · Python 3.11+ · Linux / POSIX · Local MCP stdio
 
-This repository focuses on two **different** tasks. The threat-intelligence scanner collects security information and sends notifications. The Guardian experiment evaluates proposed agent actions; a separate, **read-only reference adapter** proves a few specific tool restrictions can be enforced before a file is accessed.
+[Try it](#try-it) · [How it works](#how-it-works) · [Privacy](#your-data) · [Roadmap](docs/ROADMAP.md) · [Contribute](CONTRIBUTING.md)
 
-**Maturity:** open-source reference / release candidate. Not independently audited, not certified, not a universal agent firewall or a substitute for runtime isolation.
+Twinthos Sentinel is an open-source reference for **enforcing a small agent tool boundary**. Its MCP server exposes one policy-checked file reader. Try an approved read, then request a shell command or a private path: the demo checks what actually happens and returns a failing exit code if the boundary breaks.
 
-## Current assurance
+Built for developers learning to scope agent tools, security engineers writing regression tests, and educators who want an inspectable example. No model account or API key is needed for the demo.
 
-**Reproducible:** offline unit tests, a bounded POSIX file-reading adapter, an actual MCP stdio subprocess proof, container smoke checks, and synthetic cloud audit triage.
+**Status: reference / release candidate.** The boundary applies to the included tool. Connecting Sentinel does not restrict an agent's other tools, secure a whole machine, or establish production readiness.
 
-**Not established:** live protection of a full agent runtime or an enterprise tenant, independent penetration testing, full Microsoft 365 telemetry integration, guaranteed incident alerts, certified compliance, breach prevention, or production support.
+## Try it
 
-A separate SQLite alert-queue module is present. Runtime queue files may include message payloads; the default now belongs outside the checkout under a private user data directory. The queue is not evidence that end-to-end delivery or a customer deployment has been tested.
-
-## Reproducible demonstration — run it in one command
-
-```sh
-python3 examples/proof.py
-python3 defensive_event_triage.py --input examples/fixtures/synthetic_cloud_events.jsonl
-```
-
-The first command starts a real local **MCP stdio server** with synthetic files and exercises a permitted read plus denied shell, path-escape and hidden-secret access. It reports actual true/false checks. The second analyses **synthetic cloud audit events** and emits aggregate signals without identities. Neither requires a production credential or LLM API. These are deliberately scoped proofs, not a claim that Sentinel protects a real tenant or knows the attacker.
-
-## New: enforce one MCP tool and triage ARTEX-era cloud signals
-
-The [minimal read-only MCP server](docs/AGENT-BOUNDARY-DEMO.md) implements an actual local JSON-RPC tool boundary with negative tests. It has **no shell, network or write tools**. The [ARTEX defence note](docs/ARTEX-DEFENSE.md) links primary incident research and an offline, privacy-conscious log triage example. Neither component claims to secure every agent or detect all attacks.
-
-```sh
-python3 -m unittest discover -s tests -v
-```
-
-## See the security boundary work — one command
-
-```sh
-python3 reference_adapter.py --demo
-```
-
-Expected on a compatible POSIX filesystem:
-
-```text
-PASS: Scoped file read allowed.
-PASS: File deletion denied before execution; file unchanged.
-PASS: Evidence ledger verified; contents not logged.
-Scope: this read-only adapter only; NOT a universal agent firewall.
-```
-
-The adapter deliberately supports **only** bounded UTF-8 file reads within an explicitly configured workspace. It has no shell, write or network API. It rejects unknown operations, parent-directory traversal and symlinks, treats `ask` as denied, and records a decision before returning file contents. It uses POSIX directory file descriptors and no-follow flags to avoid relying on string path checks alone.
-
-The reference adapter does **not** automatically protect arbitrary MCP clients or full AI agent runtimes. Those systems need a real integration with an unavoidable tool boundary and no alternate routes to the same privileges.
-
-Run the full offline test suite:
-
-```sh
-python3 -m unittest discover -s tests -v
-```
-
-The suite includes authorized/unauthorized calls, ledger integrity, sensitive-content redaction, symlink traversal, delivery retries and dry-run state. CI uses synthetic fixtures; it does not constitute independent penetration testing.
-
-## Threat monitor — what actually works
-
-- Pulls a primary CVE feed and enriches findings with CISA KEV and FIRST EPSS when those sources are available.
-- Filters by AI-related terms and optionally matches monitored suppliers. These are **heuristic relevance filters**, not guarantees of detection.
-- Optionally reviews specifically supported pinned AI dependency versions using OSV; unpinned packages and unsupported lockfile formats cannot be verified.
-- Sends notifications via Telegram or approved Slack/Discord webhook destinations, records acknowledged items, and retries notifications that failed.
-- Provides dry-run mode without sending alerts or changing deduplication state; checks the freshness of a successful live scan separately from whether the process is alive.
-
-Not supported: comprehensive SCA, full SBOM assurance, ransomware prevention, vulnerability remediation, live process isolation, all-platform threat coverage, guaranteed alert delivery or compliance certification.
-
-### Install / verify
-
-Requires Python 3.10+ and Internet access for live feed scans.
+Requires Python 3.11+ on Linux/POSIX. The synthetic MCP proof uses the Python standard library; after cloning, it needs no package download or network access.
 
 ```sh
 git clone https://github.com/twinthos/ai-sec-sentinel.git
 cd ai-sec-sentinel
-python3 -m pip install -r requirements.txt
-python3 -m unittest discover -s tests -v
-python3 ai_sec_sentinel.py --dry-run --since-hours 24
+python3 examples/proof.py
 ```
 
-The dry run previews alert formatting and queries live feeds. The sample configuration disables optional RSS news monitoring until you explicitly set `news.enabled=true` in `sentinel_config.json`; it does not monitor X accounts or cloud infrastructure. Network errors should produce a nonzero status rather than a misleading clean result.
+Look for `"pass": true` and all ten checks set to `true`. These results come from a real local MCP subprocess and temporary synthetic files:
 
-### Configure a live notification destination
+| Request or observation | Expected result |
+| --- | --- |
+| Initialize MCP and list tools | Exactly one exposed tool |
+| Read an approved document | Allowed |
+| Call a shell tool | Denied |
+| Escape the workspace or read a hidden secret path | Denied |
+| Inspect the outside file | Unchanged |
+| Inspect the evidence ledger | Document contents absent |
+| Close the server | Clean exit |
 
-Use environment variables, not committed credentials.
+For a plain-language result and the rest of the toolkit:
 
 ```sh
-# Telegram
-export TELEGRAM_BOT_TOKEN="YOUR_TOKEN"
-export TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
-
-# Or use an approved Slack/Discord webhook
-# export SENTINEL_WEBHOOK_URL="https://hooks.slack.com/services/..."
-# export SENTINEL_WEBHOOK_PLATFORM="slack"
-
-python3 ai_sec_sentinel.py --test-alert  # prove every configured channel acknowledges a test
-python3 ai_sec_sentinel.py --since-hours 24
-python3 ai_sec_sentinel.py --daemon --interval 60
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements.txt
+python ai_sec_sentinel.py --quickstart
 ```
 
-Without a delivery destination, live monitoring fails visibly. Set up monitoring of nonzero exits and the health check; a running daemon alone is not evidence of functioning alerts.
+The first result should be:
 
-### Local lockfile check
-
-```sh
-python3 ai_sec_sentinel.py --check-only --lockfile requirements.txt --ecosystem python
+```text
+PASS: an approved file was read; shell calls and private paths were blocked.
 ```
 
-A reported finding exits nonzero, as does incomplete strict coverage. Only supported, exactly pinned dependency versions are assessed. A lack of findings does **not** assert that an entire application has no vulnerabilities. For complete dependency auditing use a dedicated, maintained SCA tool.
+Running `python ai_sec_sentinel.py` without arguments shows the starting command. A failed quickstart exits nonzero. [Troubleshooting and contributor setup →](CONTRIBUTING.md)
 
-### Operations and deployment
+## How it works
 
-```sh
-python3 ai_sec_sentinel.py --health
-docker compose up --build -d
+```mermaid
+flowchart LR
+    A[Local MCP client] --> B[One read-only tool]
+    B --> C{Policy and path checks}
+    C -->|Deny| D[Error without file content]
+    C -->|Allow| E[Bounded file read]
+    E --> F[Content screening]
+    F --> G[Write decision evidence]
+    G --> H[Return approved content]
 ```
 
-The Docker image runs as a non-root user and stores runtime data in the `/data` volume. Configure a notification destination before starting a live service. The health command checks freshness of the last successful live scan; it is not a guarantee that every alert was received.
+The host supplies the workspace, policy and agent identity. File access uses POSIX directory descriptors and no-follow flags; unknown tools, traversal and symlinks are rejected. A decision must be recorded before content returns. The server exposes no shell, network or write tools.
 
-The optional `guardian_gate.py` API and `dashboard.py` are **separate processes**, loopback-only by default, and require their own secrets. Guardian registration requires a distinct admin key. Do not expose either service directly to the Internet.
+**Your integration must remove alternate paths to those privileges.** An agent that retains a separate unrestricted file reader or shell can bypass this boundary. Allowed document text is still untrusted, and pattern-based content screening cannot recognize every confidential fact.
 
-## Reproducible security and portfolio review
+[Connect a local MCP client →](docs/AGENT-BOUNDARY-DEMO.md) · [Threat model →](docs/THREAT_MODEL.md) · [Test-to-claim evidence →](docs/EVIDENCE.md)
 
-See [the evidence-led case study](docs/SECURITY-AND-CAREER.md) for an honest threat-to-test mapping, the limits of the demo, and what a security hiring manager can reproduce. Guardian Gate now requires \`GUARDIAN_AGENT_ID\` (a host-set identity) before answering evaluation or passport requests. An authenticated API decision is **not** a substitute for enforcement at the real tool boundary.
+## Choose a workflow
 
-## What the project does not prove
+| Goal | Start with | Network / data |
+| --- | --- | --- |
+| Verify the tool boundary | `python examples/proof.py` | Offline; synthetic files |
+| Triage sample cloud events | `python defensive_event_triage.py --input examples/fixtures/synthetic_cloud_events.jsonl` | Offline; aggregate signals |
+| Develop and test | `python -B -m unittest discover -s tests -v` | Synthetic offline tests |
+| Preview public security feeds | `python ai_sec_sentinel.py --dry-run --since-hours 24` | Online; no notifications |
+| Configure notification delivery | [Live monitoring guide](docs/LIVE-MONITORING.md) | Online; explicit destination |
 
-**An allow/deny API response is not enforcement.** The model may still be able to reach tools by another path. `reference_adapter.py` shows what enforcement looks like for one deliberately limited capability; it does not secure an unrestricted runtime.
+Cloud triage accepts normalized events; it is not a live Microsoft 365 integration. Feed monitoring uses relevance heuristics; it is not comprehensive dependency auditing. Guardian Gate and Dashboard are separate optional processes, not automatic enforcement of arbitrary agent actions.
 
-The evidence ledger verifies local record hashes and chaining, but an administrator with write access could replace the full history. There is no independent log anchoring, signing or immutable store.
+## Your data
 
-Permission scopes, response accuracy and company-specific applicability must be verified before production. See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for protected assets, assumptions, bypasses and remaining work.
+- **Demo:** temporary synthetic files; no personal documents, model API calls or notifications.
+- **Runtime state:** defaults to `~/.local/share/twinthos-sentinel`, outside the checkout. Set `SENTINEL_DATA_DIR` to override it. Existing state is not automatically migrated.
+- **Online checks:** OSV receives package names and versions. Raw lockfile upload requires explicit consent and rejects sensitive filenames and symlinks. Feed providers see request metadata. `--dry-run` still uses the network.
+- **Notifications:** the chosen provider receives alert content. Common secret and email patterns are redacted, credential-bearing exception URLs are omitted, and notification/dependency POST redirects are disabled. These controls do not guarantee that all private information is removed.
+- **Contributions:** use synthetic examples. Never paste credentials, real customer records, private logs or runtime databases into issues, PRs or screenshots.
 
-## Technical review / contributing
+[Report a vulnerability privately →](https://github.com/twinthos/ai-sec-sentinel/security/advisories/new) · [Security policy →](SECURITY.md)
 
-Start at [docs/EVIDENCE.md](docs/EVIDENCE.md) for the proof checklist, then inspect [reference_adapter.py](reference_adapter.py), [tests/test_reference_adapter.py](tests/test_reference_adapter.py), [ai_sec_sentinel.py](ai_sec_sentinel.py) and [tests/test_runtime_safety.py](tests/test_runtime_safety.py).
+## Where Sentinel fits
 
-Reproduce the tests; review the negative cases; open an issue with a minimal sanitized reproduction. Report security vulnerabilities **privately** using [GitHub Security Advisories](https://github.com/twinthos/ai-sec-sentinel/security/advisories/new). Never post tokens, private logs or credentials in issues.
+Use evaluation tools to investigate model behavior and runtime isolation to constrain the process. Sentinel supplies a small execution boundary whose allow/deny behavior you can inspect and test.
 
-Licensed under [MIT](LICENSE). The project is maintained by Twinthos; there is no implied endorsement by OWASP, GitHub or external security vendors.
+Our [current ecosystem review](docs/ECOSYSTEM.md) compares this scope with MCP, Promptfoo, NVIDIA garak and Microsoft PyRIT, and records maintenance changes that matter when selecting dependencies. It includes dated primary sources, not adoption rankings or unsupported performance claims.
+
+## Help build the next useful piece
+
+Start with the [roadmap](docs/ROADMAP.md): official-client interoperability, a reproducible isolated host integration, and verified monitoring delivery. Each milestone has concrete acceptance criteria.
+
+Good contributions include a synthetic regression for a bypass, a clearer setup step, or a reproducible integration report. [Contributor guide →](CONTRIBUTING.md)
+
+If the demo helps you, share its synthetic output and the version you tested. A useful bug report or reproducible example helps the next person get a working result.
+
+MIT licensed. Maintained by [Twinthos](https://twinthos.com/security/). No third-party endorsement, independent audit or production support SLA is implied.

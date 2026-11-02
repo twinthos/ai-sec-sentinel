@@ -2,6 +2,22 @@
 
 All notable changes to Twinthos Sentinel are documented here.
 
+## Unreleased
+
+### Added
+- A plain-language offline quickstart and a guided no-argument CLI entry.
+- Privacy regression tests for notifications, upload consent and redirects.
+- A dependency-free demo entry point in the README and CI validation before dependency installation.
+- A dated ecosystem review, acceptance-based roadmap, monitoring guide and privacy-conscious issue/PR templates.
+
+### Changed
+- Scanner, news and dashboard state defaults now live outside the checkout. Existing state is not automatically migrated; `SENTINEL_DATA_DIR` remains supported.
+- Notification messages redact common secret/email patterns; send failures report error types instead of potentially credential-bearing URLs.
+- Notification and dependency POST requests reject redirects. Raw upload requires explicit boolean consent and rejects sensitive filenames and symlinks.
+- Documentation distinguishes online dependency lookup from offline parsing, and describes the limits of redaction and the MCP boundary.
+
+These changes are not yet a published release. The historical entries below describe earlier versions; current scope and assurance are defined in README.md and docs/EVIDENCE.md.
+
 ## [1.4.1] - 2026-11-01
 
 ### Added
