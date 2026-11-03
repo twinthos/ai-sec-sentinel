@@ -1082,10 +1082,10 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         title = html.escape(str(kev.get("vulnerabilityName") or "Known exploited vulnerability")[:240])
         action = html.escape(str(kev.get("requiredAction") or "Review the official CISA advisory")[:400])
         msg = (
-            f"🛑 <b>NEW CISA KEV — exploited in the wild</b>\\n\\n"
-            f"<b>{cid}</b> — {vendor} / {product}\\n"
-            f"{title}\\n"
-            f"<b>Action:</b> {action}\\n"
+            f"🛑 <b>NEW CISA KEV — exploited in the wild</b>\n\n"
+            f"<b>{cid}</b> — {vendor} / {product}\n"
+            f"{title}\n"
+            f"<b>Action:</b> {action}\n"
             "Source: https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
         )
         delivered_telegram = send_telegram(msg, token, chat) if token and chat else False
