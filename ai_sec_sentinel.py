@@ -1478,7 +1478,7 @@ def _handle_callback_query(update: dict, token: str) -> bool:
     data = callback.get("data")
     if not isinstance(data, str):
         return False
-    match = re.fullmatch(r"feedback:(CVE-\\d{4}-\\d{4,}):(useful|ignored)", data)
+    match = re.fullmatch(r"feedback:(CVE-\d{4}-\d{4,}):(useful|ignored)", data)
     if match is None:
         return False
     message = callback.get("message")
