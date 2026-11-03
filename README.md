@@ -3,7 +3,7 @@
 **A small, inspectable AI security project: public vulnerability monitoring, a scoped MCP tool-enforcement demonstration and offline cloud-audit triage.**
 
 [![CI](https://github.com/twinthos/ai-sec-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/twinthos/ai-sec-sentinel/actions/workflows/ci.yml)
-[Security policy](SECURITY.md) · [Threat model](docs/THREAT_MODEL.md) · [Engineering evidence](docs/EVIDENCE.md) · [Twinthos](https://twinthos.com/security/)
+[Security policy](SECURITY.md) · [Threat model](docs/THREAT_MODEL.md) · [Engineering evidence](docs/EVIDENCE.md) · [November 2026 security review](docs/2026-11-03-SECURITY-REVIEW.md) · [Twinthos](https://twinthos.com/security/)
 
 This repository focuses on two **different** tasks. The threat-intelligence scanner collects security information and sends notifications. The Guardian experiment evaluates proposed agent actions; a separate, **read-only reference adapter** proves a few specific tool restrictions can be enforced before a file is accessed.
 
@@ -68,6 +68,8 @@ The suite includes authorized/unauthorized calls, ledger integrity, sensitive-co
 - Optionally reviews specifically supported pinned AI dependency versions using OSV; unpinned packages and unsupported lockfile formats cannot be verified.
 - Sends notifications via Telegram or approved Slack/Discord webhook destinations, records acknowledged items, and retries notifications that failed.
 - Provides dry-run mode without sending alerts or changing deduplication state; checks the freshness of a successful live scan separately from whether the process is alive.
+- Separately watches **recent CISA KEV additions** for AI-related products and explicitly configured suppliers, even when the original CVE was reported earlier. KEV confirms known exploitation; it does not prove your specific assets are exposed.
+- Accepts Telegram feedback only from operators included in `TELEGRAM_ALLOWED_USER_IDS` and from the configured `TELEGRAM_CHAT_ID`; an unconfigured operator allowlist fails closed.
 
 Not supported: comprehensive SCA, full SBOM assurance, ransomware prevention, vulnerability remediation, live process isolation, all-platform threat coverage, guaranteed alert delivery or compliance certification.
 
@@ -93,6 +95,11 @@ Use environment variables, not committed credentials.
 # Telegram
 export TELEGRAM_BOT_TOKEN="YOUR_TOKEN"
 export TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
+# Only these Telegram user IDs may mark an alert useful/ignored.
+# Required if Telegram callback feedback is enabled.
+export TELEGRAM_ALLOWED_USER_IDS="YOUR_NUMERIC_USER_ID"
+# Required (>=24 characters) for --webhook-port callback receiving.
+# export TELEGRAM_WEBHOOK_SECRET="YOUR_RANDOM_24_PLUS_CHAR_SECRET"
 
 # Or use an approved Slack/Discord webhook
 # export SENTINEL_WEBHOOK_URL="https://hooks.slack.com/services/..."
