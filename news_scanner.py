@@ -47,8 +47,13 @@ def _load_config():
             pass
     return {}
 
+def _state_path():
+    import os
+    return Path(os.environ.get("SENTINEL_DATA_DIR") or (Path.home() / ".local" / "share" / "twinthos-sentinel")) / "sentinel_state.json"
+
+
 def _load_state():
-    state_path = Path(__import__("os").environ.get("SENTINEL_DATA_DIR", Path(__file__).parent)) / "sentinel_state.json"
+    state_path = _state_path()
     if state_path.exists():
         try:
             return json.loads(state_path.read_text(encoding="utf-8"))
@@ -58,7 +63,7 @@ def _load_state():
 
 def _save_state(state: dict):
     state["last_news_run"] = datetime.now(timezone.utc).isoformat()
-    state_path = Path(__file__).with_name("sentinel_state.json")
+    state_path = _state_path()
     atomic_write(state_path, json.dumps(state, indent=2))
 
 def _matches_keywords(entry_text: str, keywords: list[str]) -> bool:
