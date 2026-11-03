@@ -700,7 +700,8 @@ def generate_compliance_report(findings: list, output_path: str = None) -> str:
     except ImportError:
         return "reportlab not available"
     if output_path is None:
-        output_path = "/tmp/compliance_report.pdf"
+        DATA_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        output_path = str(DATA_DIR / "synthetic_compliance_demo.pdf")
     doc = SimpleDocTemplate(output_path, pagesize=A4)
     styles = getSampleStyleSheet()
     story = []
