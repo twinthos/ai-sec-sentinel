@@ -21,7 +21,7 @@ def select_recent_relevant_kev(
     if not isinstance(feed, dict) or not isinstance(feed.get("vulnerabilities"), list):
         raise ValueError("Invalid CISA KEV response")
     patterns = [
-        re.compile(r"(?<!\\w)" + re.escape(name.strip()) + r"(?!\\w)", re.IGNORECASE)
+        re.compile(r"(?<!\w)" + re.escape(name.strip()) + r"(?!\w)", re.IGNORECASE)
         for name in suppliers
         if isinstance(name, str) and len(name.strip()) >= 3
     ]
