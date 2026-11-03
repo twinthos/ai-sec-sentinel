@@ -861,8 +861,11 @@ def _osv_lockfile_check(path: Path, content: str, ecosystem: str, strict: bool =
                 "https://api.osv.dev/v1/query",
                 json={"package": {"name": package, "ecosystem": osv_ecosystem}, "version": version},
                 timeout=15,
+                allow_redirects=False,
             )
             response.raise_for_status()
+            if response.status_code != 200:
+                raise ValueError("OSV did not return a successful response")
             data = response.json()
             for vuln in data.get("vulns", []):
                 fixes = []
