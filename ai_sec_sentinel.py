@@ -20,6 +20,7 @@ Usage:
 """
 
 import argparse
+from privacy import redact_text, is_sensitive_file
 import html
 import json
 import os
@@ -60,7 +61,7 @@ CVE_NOW_FEED = "https://cve.now/feed?format=json"
 CVE_NOW_API = "https://cve.now/api/v1/entries"
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 EPSS_API = "https://api.first.org/data/v1/epss"
-DATA_DIR = Path(os.getenv("SENTINEL_DATA_DIR", str(Path(__file__).parent)))
+DATA_DIR = Path(os.getenv("SENTINEL_DATA_DIR") or (Path.home() / ".local" / "share" / "twinthos-sentinel"))
 STATE_FILE = DATA_DIR / "sentinel_state.json"
 CONFIG_FILE = Path(__file__).with_name("sentinel_config.json")
 FEEDBACK_FILE = DATA_DIR / "sentinel_feedback.json"
@@ -153,7 +154,7 @@ def atomic_write(path, data):
     """Atomically replace a state file; do not expose user content to other users."""
     import tempfile
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as out:
