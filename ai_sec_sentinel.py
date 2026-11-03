@@ -1204,6 +1204,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
 
 def main():
     parser = argparse.ArgumentParser(description="Twinthos Sentinel — continuous threat intelligence")
+    parser.add_argument("--quickstart", action="store_true", help="Verify a synthetic local MCP tool boundary without network or account access")
     parser.add_argument("--version", action="version", version="Twinthos Sentinel v1.4.1")
     parser.add_argument("--lockfile", help="Path to lockfile")
     parser.add_argument("--ecosystem", choices=["python", "npm", "rust", "go", "ruby", "php", "dotnet"])
@@ -1230,7 +1231,28 @@ def main():
     parser.add_argument("--demo", action="store_true", help="Run all checks in sequence (demo mode)")
     parser.add_argument("--guardian", action="store_true", help="Run Sentinel Guardian demo (agent security control plane)")
     parser.add_argument("--passport", metavar="AGENT_ID", help="Show agent passport (blast radius, permissions)")
+    if len(sys.argv) == 1:
+        print("Start here: python3 ai_sec_sentinel.py --quickstart")
+        print("Runs a local synthetic tool-boundary proof without loading account settings.")
+        print("Use --help for separately configured networked scanning options.")
+        return 0
     args = parser.parse_args()
+    if args.quickstart:
+        if sys.argv[1:] != ["--quickstart"]:
+            parser.error("use --quickstart alone; live options require a separate command")
+        from examples.proof import prove
+        try:
+            checks = prove()
+        except Exception:
+            print("CHECK FAILED: local proof could not complete. See offline regression tests.")
+            return 1
+        if not checks or not all(checks.values()):
+            print("CHECK FAILED: the local tool-boundary proof did not pass.")
+            return 1
+        print("PASS: permitted read and forbidden tool/path actions behaved as tested.")
+        print("Only synthetic temporary files were used; no live scan or notification.")
+        print("This proves only the included scoped MCP tool, not another agent runtime.")
+        return 0
 
     # Load config
     config = load_config()
