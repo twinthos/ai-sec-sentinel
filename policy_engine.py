@@ -135,28 +135,31 @@ class PolicyEngine:
         if rule.condition == "always":
             return True
         if rule.condition == "destination":
-            dest = params.get("url", params.get("destination", ""))
+            # Interpret only the URL hostname. Substring matching the entire
+            # URL lets "safe.example.attacker.tld" inherit an allow rule.
+            destination = self._url_host(params.get("url", params.get("destination", "")))
             if rule.action == Decision.BLOCK:
-                # Block if destination matches blocked pattern
-                for blocked in self.blocked_destinations:
-                    if blocked in dest:
-                        return True
-                # Also check condition_params
-                blocked_patterns = rule.condition_params.get("blocked", [])
-                for bp in blocked_patterns:
-                    if bp in dest:
-                        return True
-                return False
-            elif rule.action == Decision.ALLOW:
-                # Allow if destination is in allowed list
-                for allowed in self.allowed_destinations:
-                    if allowed in dest:
-                        return True
-                allowed_patterns = rule.condition_params.get("allowed", [])
-                for ap in allowed_patterns:
-                    if ap in dest:
-                        return True
-                return False if self.allowed_destinations else True
+                if destination is None:
+                    return True  # Invalid URL must not escape a block rule.
+                host = destination[1]
+                blocked = list(self.blocked_destinations) + list(rule.condition_params.get("blocked", []))
+                return any(
+                    isinstance(item, str)
+                    and (host == item.lower() or host.endswith("." + item.lower()))
+                    for item in blocked if item
+                )
+            if rule.action == Decision.ALLOW:
+                if destination is None:
+                    return False
+                host = destination[1]
+                approved = list(self.allowed_destinations) + list(rule.condition_params.get("allowed", []))
+                # An empty list is not permission. Exact hosts only: subdomains
+                # must be separately approved.
+                return any(
+                    isinstance(item, str) and host == item.lower()
+                    for item in approved if item
+                )
+            return False
         if rule.condition == "resource":
             resource = params.get("path", params.get("resource", ""))
             blocked_resources = rule.condition_params.get("blocked", [])
@@ -208,37 +211,73 @@ class PolicyEngine:
         token.used = True
         return True, "OK"
     
-    def check_ssrf(self, url: str) -> Tuple[bool, str]:
-        """Check URL for SSRF risks. Returns (safe, reason)."""
-        import urllib.parse
-        try:
-            parsed = urllib.parse.urlparse(url)
-        except Exception:
-            return False, "Invalid URL"
-        
-        hostname = parsed.hostname or ""
-        
-        # Block loopback
-        if hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
-            return False, "Loopback blocked"
-        
-        # Block private IPs
+    @staticmethod
+    def _url_host(url: object):
+        """Parse a bounded HTTP(S) URL; reject ambiguous or non-public hosts.
+
+        This is a policy precheck, NOT a DNS resolver or an outbound network
+        sandbox. A real HTTP client must pin/verify resolved destination IPs,
+        block private ranges at connect time and reject redirects.
+        """
         import ipaddress
+        import re
+        from urllib.parse import urlsplit
+
+        if not isinstance(url, str) or not url or len(url) > 2048:
+            return None
+        if any(ord(char) <= 32 or ord(char) == 127 for char in url):
+            return None
         try:
-            ip = ipaddress.ip_address(hostname)
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-                return False, f"Private/reserved IP blocked: {hostname}"
-            # Block metadata endpoints
-            if str(ip) in ("169.254.169.254", "fd00:ec2::254"):
-                return False, "Cloud metadata endpoint blocked"
-        except ValueError:
-            pass  # Not an IP, it's a hostname
-        
-        # Block metadata hostnames
-        if "metadata" in hostname.lower() or "169.254" in hostname:
-            return False, "Metadata endpoint blocked"
-        
-        return True, "OK"
+            parsed = urlsplit(url)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                return None
+            if parsed.username is not None or parsed.password is not None or parsed.fragment:
+                return None
+            expected_port = 443 if parsed.scheme == "https" else 80
+            if parsed.port not in (None, expected_port):
+                return None
+            host = (parsed.hostname or "").lower()
+            if not host or host.endswith(".") or len(host) > 253:
+                return None
+            try:
+                address = ipaddress.ip_address(host)
+            except ValueError:
+                if "." not in host or host.startswith("0x"):
+                    return None
+                if host.endswith((".local", ".localhost", ".internal", ".test", ".invalid")):
+                    return None
+                if "metadata" in host or host.rsplit(".", 1)[-1].isdigit():
+                    return None
+                labels = host.split(".")
+                if not all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
+                           for label in labels):
+                    return None
+            else:
+                if not address.is_global:
+                    return None
+            return parsed.scheme, host
+        except (ValueError, AttributeError):
+            return None
+
+    def check_ssrf(self, url: str, approved_hosts=None) -> Tuple[bool, str]:
+        """Fail-closed HTTPS destination precheck, NOT complete SSRF defence.
+
+        Callers must use an outbound transport with DNS rebind protection,
+        connect-time IP checks, redirects disabled and network egress controls.
+        This helper is intentionally not used as evidence of a secured request.
+        """
+        destination = self._url_host(url)
+        if destination is None:
+            return False, "Malformed, ambiguous or non-public destination"
+        scheme, host = destination
+        if scheme != "https":
+            return False, "Only HTTPS allowed"
+        if not isinstance(approved_hosts, (set, frozenset, list, tuple)):
+            return False, "Explicit destination allowlist required"
+        if not any(isinstance(candidate, str) and host == candidate.lower()
+                   for candidate in approved_hosts):
+            return False, "Destination not explicitly approved"
+        return True, "Precheck passed; network enforcement still required"
 
 
 def run_policy_tests():
@@ -303,8 +342,10 @@ def run_policy_tests():
     print("\n8. SSRF protection:")
     safe, reason = pe.check_ssrf("http://169.254.169.254/latest/meta-data/")
     assert safe == False
-    safe2, reason2 = pe.check_ssrf("http://example.com/api")
+    safe2, reason2 = pe.check_ssrf("https://example.com/api", {"example.com"})
     assert safe2 == True
+    assert pe.check_ssrf("https://example.com.attacker.test", {"example.com"})[0] is False
+    assert pe.check_ssrf("https://example.com/api")[0] is False
     safe3, _ = pe.check_ssrf("http://127.0.0.1:8080/")
     assert safe3 == False
     print("   PASS: SSRF blocked, normal allowed")
