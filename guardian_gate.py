@@ -169,7 +169,7 @@ class GateHandler(BaseHTTPRequestHandler):
                 msg = f"GUARDIAN ALERT: {decision['decision'].upper()} - {tool_name} by {agent_id}\nReasons: {', '.join(decision['reasons'])}"
                 requests.post(
                     f"https://api.telegram.org/bot{token}/sendMessage",
-                    json={"chat_id": chat, "text": msg}, timeout=10,
+                    json={"chat_id": chat, "text": msg}, timeout=10, allow_redirects=False,
                 )
         except Exception:
             pass
