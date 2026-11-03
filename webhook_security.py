@@ -238,16 +238,17 @@ def run_webhook_tests():
     
     # Test 8: Suppression audit
     print("\n8. Suppression audit:")
-    import tempfile, os
-    db = tempfile.mktemp(suffix=".db")
-    sa = SuppressionAudit(db_path=db)
-    sid = sa.suppress("CVE-2026-12345", "user1", "False positive in test env")
-    assert sid > 0
-    assert sa.is_suppressed("CVE-2026-12345") == True
-    # Re-evaluate on material risk change
-    sa.re_evaluate("CVE-2026-12345", "CRITICAL")
-    assert sa.is_suppressed("CVE-2026-12345") == False
-    os.unlink(db)
+    import tempfile
+    from pathlib import Path
+    with tempfile.TemporaryDirectory(prefix="sentinel-suppression-demo-") as tempdir:
+        db = str(Path(tempdir) / "suppression_audit.db")
+        sa = SuppressionAudit(db_path=db)
+        sid = sa.suppress("CVE-2026-12345", "user1", "False positive in test env")
+        assert sid > 0
+        assert sa.is_suppressed("CVE-2026-12345") is True
+        # Re-evaluate on material risk change.
+        sa.re_evaluate("CVE-2026-12345", "CRITICAL")
+        assert sa.is_suppressed("CVE-2026-12345") is False
     print("   PASS: suppression with expiry and re-evaluation")
     
     print("\n=== All webhook security tests passed ===")
