@@ -54,8 +54,7 @@ def _host(value: object) -> str | None:
         host = url.hostname
         if (url.scheme != "https" or not host or not url.netloc or
                 url.username is not None or url.password is not None or
-                url.fragment or url.port not in (None, 443) or
-                not url.path.startswith(("/", ""))):
+                url.fragment or url.port not in (None, 443)):
             return None
         if host.endswith(".") or len(host) > 253:
             return None
