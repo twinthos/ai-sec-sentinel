@@ -905,6 +905,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
     kev_ids = {v.get("cveID") for v in cisa_kev.get("vulnerabilities", []) if v.get("cveID")}
 
     alerts_sent = 0
+    emitted_this_cycle = set()
     vulns = []
 
     # Lockfile scan
@@ -1006,6 +1007,7 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         if webhook_url:
             webhook_sent = send_webhook(msg, webhook_url, config.get("webhook_platform", "slack"))
         if telegram_sent or webhook_sent:
+            emitted_this_cycle.add(raw_id)
             if not dry_run:
                 seen.add(raw_id)
             alerts_sent += 1
@@ -1054,9 +1056,50 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         sent = send_telegram(msg, token, chat)
         webhook_sent = send_webhook(msg, webhook_url, config.get("webhook_platform", "slack")) if webhook_url else False
         if sent or webhook_sent:
+            emitted_this_cycle.add(raw_id)
             if not dry_run:
                 seen.add(raw_id)
             alerts_sent += 1
+
+    # A KEV listing is a NEW exploitation-status event even if the old CVE was
+    # already acknowledged. Do not depend on the CVE publication date or feed
+    # ordering to discover recent changes in CISA's official catalog.
+    from kev_updates import select_recent_relevant_kev
+    relevant_kev = select_recent_relevant_kev(cisa_kev, since, suppliers, is_ai_related)
+    seen_kev = set(state.get("seen_kev", []))
+    kev_updates_sent = 0
+    for kev in relevant_kev:
+        cid = kev["cveID"]
+        if cid in seen_kev:
+            continue
+        if cid in emitted_this_cycle:
+            # Already delivered as a CVE/supplier alert during this scan.
+            if not dry_run:
+                seen_kev.add(cid)
+            continue
+        vendor = html.escape(str(kev.get("vendorProject") or "Unknown vendor")[:100])
+        product = html.escape(str(kev.get("product") or "Unknown product")[:100])
+        title = html.escape(str(kev.get("vulnerabilityName") or "Known exploited vulnerability")[:240])
+        action = html.escape(str(kev.get("requiredAction") or "Review the official CISA advisory")[:400])
+        msg = (
+            f"🛑 <b>NEW CISA KEV — exploited in the wild</b>\\n\\n"
+            f"<b>{cid}</b> — {vendor} / {product}\\n"
+            f"{title}\\n"
+            f"<b>Action:</b> {action}\\n"
+            "Source: https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+        )
+        delivered_telegram = send_telegram(msg, token, chat) if token and chat else False
+        delivered_webhook = send_webhook(msg, webhook_url, config.get("webhook_platform", "slack")) if webhook_url else False
+        if delivered_telegram or delivered_webhook:
+            if not dry_run:
+                seen_kev.add(cid)
+            kev_updates_sent += 1
+            alerts_sent += 1
+        if kev_updates_sent >= 5:
+            print("CISA KEV alert cap reached; remaining additions stay pending")
+            break
+    state["seen_kev"] = sorted(seen_kev)[-500:]
+    stats["new_kev_alerts"] = kev_updates_sent
 
     # Send news alerts; unacknowledged news stays eligible on the next run.
     delivered_news = set(state.get("seen_news", []))
