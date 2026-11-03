@@ -162,7 +162,7 @@ class TaskScopeTests(unittest.TestCase):
             "tool": "file_read", "params": {"path": "another/data.txt"}
         })
         handler._respond = Mock()
-        with patch.object(gate, "GATE_TASK_POLICY_FILE", str(self.path)), \\
+        with patch.object(gate, "GATE_TASK_POLICY_FILE", str(self.path)), \
              patch.object(gate, "guardian", fake):
             handler.do_POST()
         handler._respond.assert_called_once()
@@ -191,8 +191,8 @@ class TaskScopeTests(unittest.TestCase):
             "tool": "file_read", "params": {"path": "approved/brief.txt"}
         })
         handler._respond = Mock()
-        with patch.object(gate, "GATE_TASK_POLICY_FILE", str(self.path)), \\
-             patch.object(gate, "guardian", fake), \\
+        with patch.object(gate, "GATE_TASK_POLICY_FILE", str(self.path)), \
+             patch.object(gate, "guardian", fake), \
              patch("task_context.datetime") as clock:
             clock.now.return_value = NOW
             clock.fromisoformat.side_effect = datetime.fromisoformat
@@ -214,7 +214,7 @@ class TaskScopeTests(unittest.TestCase):
         })
         handler._respond = Mock()
         self.path.chmod(0o644)
-        with patch.object(gate, "GATE_TASK_POLICY_FILE", str(self.path)), \\
+        with patch.object(gate, "GATE_TASK_POLICY_FILE", str(self.path)), \
              patch.object(gate, "guardian", fake):
             handler.do_POST()
         self.assertEqual(handler._respond.call_args.args[0], 503)
