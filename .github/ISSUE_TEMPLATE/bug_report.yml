@@ -1,0 +1,37 @@
+name: Reproducible bug
+description: Report a functional bug using synthetic data only.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For exploitable vulnerabilities, use private Security Advisories instead: https://github.com/twinthos/ai-sec-sentinel/security/advisories/new
+        Do not include credentials, personal files, customer records, real logs or runtime databases. Replace data with a minimal synthetic example before posting.
+  - type: input
+    id: version
+    attributes:
+      label: Commit or release, Python version and OS
+      placeholder: "Commit abc123, Python 3.13, Ubuntu"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal synthetic reproduction
+      description: Exact command and invented input needed to reproduce the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and observed behavior
+      description: Include the exit code and only sanitized output relevant to the problem.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I replaced private data with synthetic examples and checked the text for credentials.
+          required: true

@@ -17,6 +17,19 @@ This repository focuses on two **different** tasks. The threat-intelligence scan
 
 A separate SQLite alert-queue module is present. Runtime queue files may include message payloads; the default now belongs outside the checkout under a private user data directory. The queue is not evidence that end-to-end delivery or a customer deployment has been tested.
 
+## Start here: safe local proof
+
+Requires Python 3.11+ and dependencies installed from `requirements.txt`. The command below uses **temporary synthetic files**, runs a real local MCP stdio subprocess and does **not** read runtime configuration, call external services or send notifications.
+
+```sh
+python3 -m pip install -r requirements.txt
+python3 ai_sec_sentinel.py --quickstart
+```
+
+Running `python3 ai_sec_sentinel.py` without arguments now prints help instead of starting an unconfigured network scan. `--quickstart` cannot be combined with other CLI flags. This proves the included local read-only tool boundary, **not** a production Hermes, Orgo or arbitrary MCP host integration.
+
+[Operational monitoring guide](docs/LIVE-MONITORING.md) · [Future roadmap](docs/ROADMAP.md) · [Agent security ecosystem](docs/ECOSYSTEM.md)
+
 ## Reproducible demonstration — run it in one command
 
 ```sh
