@@ -14,6 +14,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
 from sentinel_guardian import SentinelGuardian
+from task_context import ContextConfigurationError, TaskContextFirewall
 
 PORT = int(os.getenv("GUARDIAN_PORT", "8098"))
 HOST = os.getenv("GUARDIAN_HOST", "127.0.0.1")
@@ -22,6 +23,9 @@ ADMIN_API_KEY = os.getenv("GUARDIAN_ADMIN_API_KEY", "")
 # Bind the shared API credential to one identity configured by the trusted host.
 # Never let a request body select a more privileged registered agent.
 GATE_AGENT_ID = os.getenv("GUARDIAN_AGENT_ID", "").strip()
+# Opt-in: a host-controlled 0600 policy file enables per-task scope checks.
+# This does not make /evaluate an interceptor; the caller must enforce it.
+GATE_TASK_POLICY_FILE = os.getenv("GUARDIAN_TASK_POLICY_FILE", "").strip()
 MAX_BODY_BYTES = 64 * 1024
 
 guardian = SentinelGuardian()
@@ -94,6 +98,33 @@ class GateHandler(BaseHTTPRequestHandler):
             if not isinstance(params, dict):
                 self._respond(400, {"error": "params must be an object"})
                 return
+            scope_result = None
+            if GATE_TASK_POLICY_FILE:
+                # Task capability MUST be injected by a trusted host adapter.
+                # Never include this header in tool arguments, prompts or logs.
+                try:
+                    scope_result = TaskContextFirewall(GATE_TASK_POLICY_FILE).evaluate(
+                        agent_id, data.get("task_id"),
+                        self.headers.get("X-Sentinel-Task-Capability", ""),
+                        tool_name, params,
+                    )
+                except ContextConfigurationError:
+                    self._respond(503, {"error": "Task context policy unavailable"})
+                    return
+                if scope_result["decision"] != "allow":
+                    try:
+                        guardian.prove.record("task_scope_denied", agent_id, {
+                            "tool": tool_name,
+                            "reason_code": scope_result["reason_code"],
+                        })
+                    except Exception:
+                        self._respond(503, {"error": "Security evidence unavailable"})
+                        return
+                    self._respond(403, {
+                        "decision": "block",
+                        "reason_code": scope_result["reason_code"],
+                    })
+                    return
             try:
                 result = guardian.process_tool_call(agent_id, tool_name, params)
             except Exception:
@@ -109,6 +140,7 @@ class GateHandler(BaseHTTPRequestHandler):
                 "risk_level": result["event"]["risk_level"],
                 "ledger_hash": result["ledger_entry"],
                 "blast_radius": result["blast_radius"].get("risk_score", 0) if result["blast_radius"] else 0,
+                "task_scope": "verified" if scope_result else "not_configured",
             })
             return
 
