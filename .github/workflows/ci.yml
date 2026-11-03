@@ -51,6 +51,10 @@ jobs:
           retention-days: 7
       - name: Prove scoped allow/deny enforcement
         run: python reference_adapter.py --demo
+      - name: Verify no-argument safety and local quickstart
+        run: |
+          python ai_sec_sentinel.py
+          python ai_sec_sentinel.py --quickstart
       - name: Verify CLI metadata
         run: python ai_sec_sentinel.py --version
 
