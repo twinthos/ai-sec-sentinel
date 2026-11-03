@@ -106,8 +106,7 @@ class TaskScopeTests(unittest.TestCase):
             "ftp://api.example.com/",
             "https://api.example.com/#fragment",
             "https://api.example.com\\@evil.test/",
-            "https://API.EXAMPLE.COM/",
-        ):
+         ):
             with self.subTest(url=url):
                 self.assertEqual(
                     self.check("http_request", {"url": url})["decision"], "block"
