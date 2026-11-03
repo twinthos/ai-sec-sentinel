@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-DATA_DIR = Path(os.getenv("SENTINEL_DATA_DIR", Path(__file__).parent))
+DATA_DIR = Path(os.getenv("SENTINEL_DATA_DIR") or (Path.home() / ".local" / "share" / "twinthos-sentinel"))
 STATE_FILE = DATA_DIR / "sentinel_state.json"
 CONFIG_FILE = Path(__file__).with_name("sentinel_config.json")
 FEEDBACK_FILE = DATA_DIR / "sentinel_feedback.json"
