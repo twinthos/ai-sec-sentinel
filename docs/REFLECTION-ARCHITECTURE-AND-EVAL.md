@@ -68,7 +68,7 @@ This is *not* a claim Reflection needs Sentinel. It is a falsifiable engineering
 
 ## 4. Demonstration structure — disciplined order
 
-**Phase A (implemented here):** Run `python3 examples/reflection_boundary_evidence.py`. It invokes the existing `examples/proof.py` real stdio MCP subprocess, verifies **all 10 expected boolean checks**, refuses missing, added or contradictory claims, and prints a JSON evidence report with SHA-256 fingerprints. Test with `python3 -m unittest tests.test_reflection_boundary_evidence -v`. This shows only a bounded read-only MCP enforcement mechanism. This is not a model benchmark.
+**Phase A (implemented here):** Run `python3 examples/reflection_boundary_evidence.py`. It invokes the existing `examples/proof.py` real stdio MCP subprocess, verifies **all 10 expected boolean checks**, refuses missing, added or contradictory claims, and prints a JSON evidence report with SHA-256 fingerprints. Test with `python3 -m unittest discover -s tests -p 'test_reflection_boundary_evidence.py' -v`. This shows only a bounded read-only MCP enforcement mechanism. This is not a model benchmark.
 
 **Phase B (not done):** Use a trusted isolated machine/VM with synthetic workspace and no production credentials. Pin Beam model version, Mirror release/commit, Hermes version, exact tool inventory, sandbox configuration, prompts, scenarios, grader, timeouts and seeds. Record the agent's **proposed tool call** separately from the **effect that actually occurred**. Validate that every available execution path is mapped; isolate shell/browser/other MCP connectors or exclude them from the security claim.
 
