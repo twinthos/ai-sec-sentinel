@@ -477,7 +477,8 @@ def format_alert(entry: dict, epss_score: float | None = None, in_kev: bool = Fa
 
 
 def send_webhook(message: str, webhook_url: str, platform: str = "slack") -> bool:
-    """Send alert to Slack or Discord webhook."""
+    """Send redacted alert to Slack or Discord webhook."""
+    message = redact_text(message)
     if not webhook_url:
         return False
     if os.getenv("SENTINEL_DRY_RUN") == "1":
@@ -516,6 +517,7 @@ def send_webhook(message: str, webhook_url: str, platform: str = "slack") -> boo
 
 
 def send_telegram(message: str, token: str, chat_id: str, cve_id: str = "") -> bool:
+    message = redact_text(message)
     if os.getenv("SENTINEL_DRY_RUN") == "1":
         print(f"[DRY-RUN Telegram] {message[:500]}")
         return True
