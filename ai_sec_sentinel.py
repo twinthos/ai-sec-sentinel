@@ -449,6 +449,9 @@ def format_alert(entry: dict, epss_score: float | None = None, in_kev: bool = Fa
     sev = severity_rank(entry)
     sev_emoji = {3: "🔴", 2: "🟠", 1: "🟡"}.get(sev, "⚪")
     sev_label = {3: "CRITICAL", 2: "HIGH", 1: "MEDIUM", 0: "LOW"}.get(sev, "UNKNOWN")
+    # KEV membership establishes exploitation, not a CVSS score.
+    if in_kev and sev == 0 and entry.get("cvss") is None and not entry.get("severity"):
+        sev_emoji, sev_label = "🛑", "KNOWN EXPLOITED (UNSCORED)"
 
     clean_title = html.escape(title.split("#")[0].strip())
     clean_cve_id = html.escape(cve_id)
@@ -503,10 +506,11 @@ def send_webhook(message: str, webhook_url: str, platform: str = "slack") -> boo
             payload = {"content": clean}
         else:
             payload = {"text": clean}
-        r = requests.post(webhook_url, json=payload, timeout=15, verify=True)
+        r = requests.post(webhook_url, json=payload, timeout=15, verify=True, allow_redirects=False)
         return r.status_code in (200, 204)
     except Exception as e:
-        print(f"Webhook send failed: {e}")
+        # Exception strings can contain a complete signed webhook URL.
+        print(f"Webhook send failed: {type(e).__name__}")
         return False
 
 
@@ -538,17 +542,22 @@ def send_telegram(message: str, token: str, chat_id: str, cve_id: str = "") -> b
                     ]
                 ]
             }
-        r = requests.post(url, json=payload, timeout=15, verify=True)
+        r = requests.post(url, json=payload, timeout=15, verify=True, allow_redirects=False)
         if r.status_code == 429:
-            retry_after = r.json().get("parameters", {}).get("retry_after", 5)
+            try:
+                retry_after = int(r.json().get("parameters", {}).get("retry_after", 5))
+            except (TypeError, ValueError, KeyError):
+                retry_after = 5
+            retry_after = max(1, min(retry_after, 30))
             print(f"Telegram rate limited, waiting {retry_after}s")
             time.sleep(retry_after)
-            r = requests.post(url, json=payload, timeout=15, verify=True)
+            r = requests.post(url, json=payload, timeout=15, verify=True, allow_redirects=False)
         ok = r.status_code == 200 and r.json().get("ok")
         print(f"Telegram: {'sent' if ok else 'failed'} ({r.status_code})")
         return ok
     except Exception as e:
-        print(f"Telegram error: {e}")
+        # requests exceptions may embed /bot<TOKEN>/sendMessage in their URL.
+        print(f"Telegram error: {type(e).__name__}")
         return False
 
 
@@ -971,20 +980,24 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
             except Exception:
                 continue
 
-        sev = severity_rank(entry)
-        if sev < alert_min_sev:
-            continue
-
-        # Fetch full entry for CVSS if missing
+        # Enrich missing scores BEFORE severity filtering. The previous order
+        # discarded unscored critical CVEs without ever requesting details.
+        in_kev = raw_id in kev_ids
         cvss = entry.get("cvss")
-        if cvss is None:
+        if cvss is None and not entry.get("severity"):
             full = fetch_entry(raw_id)
             if full:
-                cvss = full.get("cvss")
-                entry["cvss"] = cvss
+                if full.get("cvss") is not None:
+                    cvss = full["cvss"]
+                    entry["cvss"] = cvss
+                if full.get("severity"):
+                    entry["severity"] = full["severity"]
+        sev = severity_rank(entry)
+        # An exploited KEV must not be dropped because its severity is absent.
+        if sev < alert_min_sev and not in_kev:
+            continue
 
         epss = epss_scores.get(raw_id)
-        in_kev = raw_id in kev_ids
         msg = format_alert(entry, epss_score=epss, in_kev=in_kev, cvss=cvss)
         telegram_sent = send_telegram(msg, token, chat, cve_id=raw_id)
         # A successful webhook counts as delivery even when Telegram is off.
@@ -1451,47 +1464,95 @@ def main():
     return 0
 
 
-def _handle_callback_query(update: dict, token: str):
-    """Handle Telegram callback query from inline keyboard buttons."""
-    callback = update.get("callback_query", {})
-    data = callback.get("data", "")
-    if not data.startswith("feedback:"):
-        return
-    _, cve_id, action = data.split(":", 2)
+def _handle_callback_query(update: dict, token: str) -> bool:
+    """Apply feedback only from an explicitly authorised Telegram operator.
+
+    The webhook signature authenticates Telegram, not the human who clicked a
+    group-chat button. Both chat and user must match host-owned configuration.
+    """
+    if not isinstance(update, dict):
+        return False
+    callback = update.get("callback_query")
+    if not isinstance(callback, dict):
+        return False
+    data = callback.get("data")
+    if not isinstance(data, str):
+        return False
+    match = re.fullmatch(r"feedback:(CVE-\\d{4}-\\d{4,}):(useful|ignored)", data)
+    if match is None:
+        return False
+    message = callback.get("message")
+    sender = callback.get("from")
+    if not isinstance(message, dict) or not isinstance(sender, dict):
+        return False
+    chat_info = message.get("chat")
+    if not isinstance(chat_info, dict):
+        return False
+    chat_id = str(chat_info.get("id", ""))
+    user_id = str(sender.get("id", ""))
+    permitted_chat = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    permitted_users = {
+        item.strip() for item in os.getenv("TELEGRAM_ALLOWED_USER_IDS", "").split(",")
+        if item.strip()
+    }
+    # Fail closed: an unset operator allowlist cannot mutate suppression state.
+    if not permitted_chat or chat_id != permitted_chat or user_id not in permitted_users:
+        return False
+    cve_id, action = match.groups()
     record_feedback(cve_id, action)
-    chat_id = callback.get("message", {}).get("chat", {}).get("id")
-    if chat_id:
-        send_telegram(f"✅ Feedback recorded: <b>{cve_id}</b> → {action}", token, str(chat_id))
+    send_telegram(
+        f"✅ Feedback recorded: <b>{cve_id}</b> → {action}",
+        token, permitted_chat,
+    )
+    return True
 
 
 def _webhook_server(token: str, port: int = 8080, secret: str = ""):
-    """Simple HTTP server to receive Telegram webhook updates."""
+    """Loopback-only Telegram webhook. Deploy behind trusted TLS termination."""
+    import hmac
     from http.server import HTTPServer, BaseHTTPRequestHandler
+    if len(secret) < 24:
+        raise ValueError("Telegram webhook requires a host-owned secret of at least 24 characters")
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
-            # Verify secret token
-            if secret:
-                provided = self.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-                if provided != secret:
-                    self.send_response(403)
-                    self.end_headers()
-                    self.wfile.write(b"Forbidden")
-                    return
+            provided = self.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+            if not hmac.compare_digest(provided, secret):
+                self.send_error(403, "Forbidden")
+                return
             try:
-                length = int(self.headers.get("Content-Length", 0))
-                body = self.rfile.read(length)
-                update = json.loads(body)
-                _handle_callback_query(update, token)
+                length = int(self.headers.get("Content-Length", "0"))
+            except (ValueError, TypeError):
+                self.send_error(411, "Content-Length required")
+                return
+            if not 0 < length <= 65536:
+                self.send_error(413, "Invalid body size")
+                return
+            try:
+                update = json.loads(self.rfile.read(length))
+                if not isinstance(update, dict):
+                    self.send_error(400, "Invalid update")
+                    return
+                accepted = _handle_callback_query(update, token)
+                if not accepted:
+                    self.send_error(403, "Feedback not authorised")
+                    return
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(b"OK")
-            except Exception as e:
-                print(f"Webhook error: {e}")
-                self.send_response(500)
-                self.end_headers()
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                self.send_error(400, "Invalid JSON")
+            except Exception as error:
+                # Do not expose request data or secrets in stdout.
+                print(f"Webhook processing failed: {type(error).__name__}")
+                self.send_error(500, "Unavailable")
+
+        def log_message(self, fmt, *args):
+            # Avoid logging attacker-controlled callback URLs or secret headers.
+            pass
 
     server = HTTPServer(("127.0.0.1", port), Handler)
+    server.timeout = 10
     print(f"Webhook server listening on 127.0.0.1:{port}")
     try:
         server.serve_forever()
