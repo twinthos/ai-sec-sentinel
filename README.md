@@ -28,7 +28,22 @@ python3 ai_sec_sentinel.py --quickstart
 
 Running `python3 ai_sec_sentinel.py` without arguments now prints help instead of starting an unconfigured network scan. `--quickstart` cannot be combined with other CLI flags. This proves the included local read-only tool boundary, **not** a production Hermes, Orgo or arbitrary MCP host integration.
 
-[Operational monitoring guide](docs/LIVE-MONITORING.md) · [Future roadmap](docs/ROADMAP.md) · [Agent security ecosystem](docs/ECOSYSTEM.md)
+[Operational monitoring guide](docs/LIVE-MONITORING.md) · [Task-scoped Context Firewall](docs/TASK-CONTEXT-FIREWALL.md) · [Future roadmap](docs/ROADMAP.md) · [Agent security ecosystem](docs/ECOSYSTEM.md)
+
+## New: task-context precheck (opt-in)
+
+The [task-context firewall](docs/TASK-CONTEXT-FIREWALL.md) checks a host-issued,
+time-limited capability, the registered agent, the named tool and narrowly
+allowed file/HTTPS destinations before Guardian evaluates a tool request.
+It fails closed if its configured private policy is unavailable, and reloads
+policy for revocation. This is **a precheck, not a universal interceptor**.
+A trusted host adapter must keep the capability away from the model and
+enforce the final decision before the real operation. It has **not** been
+validated against an unrestricted Hermes or Orgo runtime.
+
+```sh
+python3 -m unittest discover -s tests -p 'test_task_context.py' -v
+```
 
 ## Reproducible demonstration — run it in one command
 
