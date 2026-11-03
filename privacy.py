@@ -27,7 +27,7 @@ SECRET_PATTERNS = [
 
 # Files that should never be transmitted
 SENSITIVE_FILES = {
-    ".env", ".env.local", ".env.production",
+    ".env", ".env.*",
     "id_rsa", "id_ed25519", "id_ecdsa",
     "credentials.json", "service-account.json",
     "*.pem", "*.key", "*.p12", "*.pfx",
@@ -134,16 +134,16 @@ def can_upload_lockfile(consent: bool, local_only: bool) -> bool:
 def explain_external_services() -> str:
     """Explain which external services receive data."""
     return """
-External services that may receive package data:
-1. OSV.dev (api.osv.dev) — receives package names and versions for vulnerability lookup.
-   Data sent: package name, version, ecosystem. No file contents, no paths, no credentials.
-2. CISA KEV feed (cisa.gov) — read-only feed download. No data sent.
-3. NVD/EPSS (nvd.nist.gov, first.org) — read-only API queries by CVE ID. No package data sent.
-4. Telegram/Slack/Discord — receives alert summaries only (CVE IDs, severity, package names).
-   No raw lockfile contents, no credentials, no PII.
-5. News RSS feeds — read-only. No data sent.
-
-In local-only mode: NO external services are contacted. All parsing and analysis is local.
+Quickstart and synthetic demonstrations run offline. Live feed scanning needs Internet access.
+Services that may receive data:
+1. cve.now: feed requests, and full raw lockfile content only if deliberately enabled.
+2. OSV.dev: package names, pinned versions and ecosystems for dependency lookups.
+3. CISA and FIRST EPSS: feed requests or CVE identifiers.
+4. Telegram, Slack and Discord: configured notification messages, descriptions and links.
+5. Configured RSS sites: feed requests.
+Network providers can also observe request metadata. A dry-run disables notifications,
+not external feed or OSV requests. Redaction is best effort, not comprehensive DLP.
+No general offline-only flag exists for the live scanner. Review destinations and data first.
 """
 
 
