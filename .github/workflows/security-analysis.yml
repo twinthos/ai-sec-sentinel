@@ -1,0 +1,57 @@
+name: Security dependency and static analysis
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '25 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sentinel-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-audit:
+    name: Python dependency advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install maintained vulnerability audit tool
+        run: python -m pip install pip-audit
+      - name: Audit direct and resolved dependency tree
+        run: python -m pip_audit -r requirements.txt --progress-spinner off
+
+  static-analysis:
+    name: Python security static analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install Bandit
+        run: python -m pip install bandit
+      - name: Scan runtime security modules for medium/high confidence issues
+        run: |
+          bandit -q -ll -ii \
+            ai_sec_sentinel.py guardian_gate.py mcp_reference_server.py \
+            reference_adapter.py policy_engine.py webhook_security.py \
+            privacy.py sentinel_guardian.py vulnerability_scanner.py
+
+# Advisory results can change without a code change. Failed jobs need triage,
+# not blanket suppression. This workflow is not an independent security audit.

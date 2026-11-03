@@ -2,6 +2,16 @@
 
 ## Scope and responsible use
 
+## Start with the scoped proof
+
+```sh
+python3 ai_sec_sentinel.py --quickstart
+```
+
+This runs only local synthetic data. For the actual networked monitor and state migration, read [live monitoring](docs/LIVE-MONITORING.md) and [state and privacy](docs/STATE-AND-PRIVACY.md).
+
+A reviewable security change must state the trust boundary, allowed and denied behaviours, data leaving the machine, and the exact negative tests. Keep reviews narrow and reproducible. New privileged tools and egress destinations require a new threat model. Consult the [roadmap](docs/ROADMAP.md) and [ecosystem comparison](docs/ECOSYSTEM.md).
+
 This is a defensive, open-source **reference** tool. Do not submit live customer records, exploit payloads, passwords, access tokens or confidential infrastructure details. Report vulnerabilities privately using [GitHub Security Advisories](https://github.com/twinthos/ai-sec-sentinel/security/advisories/new), not a public issue.
 
 ## Local development
