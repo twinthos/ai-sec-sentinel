@@ -564,12 +564,19 @@ def send_telegram(message: str, token: str, chat_id: str, cve_id: str = "") -> b
         return False
 
 
-def check_lockfile(lockfile_path: str, ecosystem: str) -> list[dict]:
+def check_lockfile(lockfile_path: str, ecosystem: str, *, consent: bool = False) -> list[dict]:
+    """Raw remote upload needs explicit consent even from a direct caller."""
+    if consent is not True:
+        raise ValueError("Raw lockfile upload requires explicit consent")
     path = Path(lockfile_path)
+    if path.is_symlink() or is_sensitive_file(str(path)):
+        raise ValueError("Sensitive or linked file cannot be uploaded")
     if not path.exists():
         print(f"Lockfile not found: {lockfile_path}")
         return []
 
+    if path.stat().st_size > 1_048_576:
+        raise ValueError("Lockfile exceeds approved upload limit")
     content = path.read_text(encoding="utf-8", errors="replace")
     try:
         r = requests.post(
@@ -577,6 +584,7 @@ def check_lockfile(lockfile_path: str, ecosystem: str) -> list[dict]:
             data=content.encode("utf-8"),
             headers={"X-Lockfile-Name": path.name, "Content-Type": "application/octet-stream"},
             timeout=30,
+            allow_redirects=False,
         )
         if r.status_code == 200:
             data = r.json()
@@ -587,7 +595,7 @@ def check_lockfile(lockfile_path: str, ecosystem: str) -> list[dict]:
             ]
             return ai_vulns
     except Exception as e:
-        print(f"Lockfile API error: {e}")
+        print(f"Lockfile API error: {type(e).__name__}")
 
     # OSV.dev fallback: query OSV for known vulnerabilities
     return _osv_lockfile_check(path, content, ecosystem)
@@ -917,11 +925,11 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
     if lockfile:
         # Consent check for uploading lockfile to cve.now
         if not config.get("allow_lockfile_upload", False):
-            print(f"Lockfile scan (offline only): {lockfile} — set allow_lockfile_upload=true to use cve.now API")
+            print(f"Lockfile scan (package names and versions sent to OSV): {lockfile} — set allow_lockfile_upload=true to use cve.now API")
             vulns = _osv_lockfile_check(Path(lockfile), Path(lockfile).read_text(encoding="utf-8", errors="replace"), ecosystem, strict=True)
         else:
             print(f"Scanning lockfile: {lockfile}")
-            vulns = check_lockfile(lockfile, ecosystem)
+            vulns = check_lockfile(lockfile, ecosystem, consent=config.get("allow_lockfile_upload") is True)
         if vulns:
             msg = f"🔍 Lockfile scan: <b>{len(vulns)} AI-related vulnerabilities</b> in {Path(lockfile).name}\n"
             for v in vulns[:10]:
