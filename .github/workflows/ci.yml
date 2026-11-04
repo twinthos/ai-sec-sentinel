@@ -41,6 +41,10 @@ jobs:
           python3 -c "import json; d=json.load(open('sentinel-proof.json')); assert d['pass'] and all(d['checks'].values())"
           python3 defensive_event_triage.py --input examples/fixtures/synthetic_cloud_events.jsonl > sentinel-triage.json
           python3 -c "import json; d=json.load(open('sentinel-triage.json')); assert len(d['signals']) >= 2 and not d['source_identifiers_included']"
+      - name: Prove research evidence report fails closed and labels scope
+        run: |
+          python3 examples/reflection_boundary_evidence.py > sentinel-reflection-boundary.json
+          python3 -c "import json; d=json.load(open('sentinel-reflection-boundary.json')); assert d['status'] == 'pass' and d['test_count'] == 10 and d['checks_passed'] == 10; assert d['model_involved'] is False and d['beam_tested'] is False and d['model_attack_success_rate'] is None"
       - name: Publish synthetic evidence artifact
         uses: actions/upload-artifact@v4
         with:
@@ -48,6 +52,7 @@ jobs:
           path: |
             sentinel-proof.json
             sentinel-triage.json
+            sentinel-reflection-boundary.json
           retention-days: 7
       - name: Prove scoped allow/deny enforcement
         run: python reference_adapter.py --demo
