@@ -3,6 +3,7 @@
 **A small, inspectable AI security project: public vulnerability monitoring, a scoped MCP tool-enforcement demonstration and offline cloud-audit triage.**
 
 [![CI](https://github.com/twinthos/ai-sec-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/twinthos/ai-sec-sentinel/actions/workflows/ci.yml)
+[![M8ven Score](https://m8ven.ai/badge/mcp/twinthos/ai-sec-sentinel)](https://m8ven.ai/mcp/twinthos/ai-sec-sentinel-67ny6k?s=readme)
 [Security policy](SECURITY.md) · [Threat model](docs/THREAT_MODEL.md) · [Engineering evidence](docs/EVIDENCE.md) · [Outbound network boundary](docs/NETWORK-BOUNDARY.md) · [State and outbound privacy](docs/STATE-AND-PRIVACY.md) · [November 2026 security review](docs/2026-11-03-SECURITY-REVIEW.md) · [Twinthos](https://twinthos.com/security/)
 
 This repository focuses on two **different** tasks. The threat-intelligence scanner collects security information and sends notifications. The Guardian experiment evaluates proposed agent actions; a separate, **read-only reference adapter** proves a few specific tool restrictions can be enforced before a file is accessed.
