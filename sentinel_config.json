@@ -21,11 +21,17 @@
       "artex",
       "storm-0940",
       "oauth application",
-      "agentic attack"
+      "agentic attack",
+      "node.js",
+      "nodejs",
+      "npm",
+      "node security",
+      "node vulnerability"
     ],
     "sources": [
       "https://www.bleepingcomputer.com/feed/",
-      "https://krebsonsecurity.com/feed/"
+      "https://krebsonsecurity.com/feed/",
+      "https://nodejs.org/en/blog/vulnerability/"
     ]
   },
   "telegram": {
