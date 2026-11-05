@@ -276,14 +276,17 @@ def scan_client(client_id: str):
             incidents_checked+=len(matches)
             for inc in matches:
                 state=version_matches(comp["version"],inc["affected_versions"])
-                if state=="not_affected": continue
+                if state=="not_affected":
+                    c.execute("UPDATE findings SET match_state='not_affected',status='resolved',resolved_at=coalesce(resolved_at,?),last_seen=? WHERE client_id=? AND incident_id=? AND component_id=?",
+                      (started,started,client_id,inc["id"],comp["id"]))
+                    continue
                 if state=="unknown" and inc["affected_versions"]: state="potential"
                 cur=c.execute("""INSERT OR IGNORE INTO findings(client_id,incident_id,component_id,match_state,first_seen,last_seen)
                   VALUES(?,?,?,?,?,?)""",(client_id,inc["id"],comp["id"],state,started,started))
                 created+=cur.rowcount
                 if cur.rowcount:
                     new_finding_ids.append(c.execute("SELECT last_insert_rowid()").fetchone()[0])
-                c.execute("UPDATE findings SET last_seen=? WHERE client_id=? AND incident_id=? AND component_id=?",(started,client_id,inc["id"],comp["id"]))
+                c.execute("UPDATE findings SET last_seen=?,match_state=? WHERE client_id=? AND incident_id=? AND component_id=?",(started,state,client_id,inc["id"],comp["id"]))
         cur=c.execute("INSERT INTO scans(client_id,started_at,completed_at,incidents_checked,findings_created,status) VALUES(?,?,?,?,?,?)",
           (client_id,started,utcnow(),incidents_checked,created,"completed"))
         result={"scan_id":cur.lastrowid,"client_id":client_id,"incidents_checked":incidents_checked,"new_findings":created,"completed_at":utcnow()}
