@@ -44,6 +44,7 @@ Do not expose the API directly to the public internet without TLS termination, r
 - `PATCH /v1/clients/{id}/components/{component_id}` update inventory version/criticality; the next scan reconciles findings
 - `POST /v1/incidents` ingest a normalized incident
 - `GET /v1/incidents` global/filterable chronological feed
+- `GET /v1/sources` source freshness and error status
 - `GET /v1/incidents/timeline-density` density buckets for charting
 - `POST /v1/clients/{id}/scan` match known incidents against client inventory
 - `GET /v1/clients/{id}/findings` matched incidents and urgency
