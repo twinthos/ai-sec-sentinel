@@ -51,6 +51,8 @@ def extract_manifests(tree, get_file):
     found=[]
     def add(eco,name,raw,source):
         version=exact_version(raw)
+        if eco=="docker" and isinstance(raw,str) and re.fullmatch(r"\\d+(?:\\.\\d+){0,3}(?:-[A-Za-z0-9._-]+)?",raw.strip()):
+            version=raw.strip()
         found.append({"ecosystem":eco,"package":name.lower(),"version":version,"source":source})
     paths={x["path"] for x in tree if x.get("type")=="blob"}
     if "package.json" in paths:
