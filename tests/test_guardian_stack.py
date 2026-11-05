@@ -15,6 +15,7 @@ class StackScannerTests(unittest.TestCase):
         self.assertIn(("maven","org.springframework.security:spring-security-core","6.3.1"),by)
         self.assertIn(("rubygems","rails","7.1.0"),by)
         self.assertIn(("docker","nginx","1.25"),by)
+        self.assertIn(("nginx","nginx","1.25"),by)
         self.assertIn(("docker","python","3.12-slim"),by)
     def test_only_github_https_urls(self):
         self.assertEqual(parse_repo_url("https://github.com/django/django.git"),("django","django"))
