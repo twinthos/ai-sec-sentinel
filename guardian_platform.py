@@ -62,6 +62,7 @@ def init_db():
           UNIQUE(source, source_id));
         CREATE INDEX IF NOT EXISTS incidents_date_idx ON incidents(published_at);
         CREATE INDEX IF NOT EXISTS incidents_cve_idx ON incidents(cve);
+        CREATE INDEX IF NOT EXISTS incidents_component_idx ON incidents(ecosystem,package);
         CREATE TABLE IF NOT EXISTS findings(
           id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
           incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
@@ -265,17 +266,15 @@ def scan_client(client_id: str):
     with db() as c:
         if not c.execute("SELECT 1 FROM clients WHERE id=?",(client_id,)).fetchone(): raise HTTPException(404,"Client not found")
         components=[dict(r) for r in c.execute("SELECT * FROM components WHERE client_id=?",(client_id,))]
-        incidents=[dict(r) for r in c.execute("SELECT * FROM incidents")]
         created=0
         new_finding_ids=[]
-        for inc in incidents:
-            # Never fan out an unmapped CVE/KEV record to every customer asset.
-            # CPE/package enrichment is required before it can be matched safely.
-            if not inc["package"] or not inc["ecosystem"]:
-                continue
-            for comp in components:
-                if inc["package"].lower()!=comp["package"].lower(): continue
-                if inc["ecosystem"].lower()!=comp["ecosystem"].lower(): continue
+        incidents_checked=0
+        for comp in components:
+            # Query only advisories for this exact package/ecosystem; do not
+            # load the entire global feed into memory for every tenant scan.
+            matches=[dict(r) for r in c.execute("SELECT * FROM incidents WHERE lower(package)=? AND lower(ecosystem)=?",(comp["package"].lower(),comp["ecosystem"].lower()))]
+            incidents_checked+=len(matches)
+            for inc in matches:
                 state=version_matches(comp["version"],inc["affected_versions"])
                 if state=="not_affected": continue
                 if state=="unknown" and inc["affected_versions"]: state="potential"
@@ -286,8 +285,8 @@ def scan_client(client_id: str):
                     new_finding_ids.append(c.execute("SELECT last_insert_rowid()").fetchone()[0])
                 c.execute("UPDATE findings SET last_seen=? WHERE client_id=? AND incident_id=? AND component_id=?",(started,client_id,inc["id"],comp["id"]))
         cur=c.execute("INSERT INTO scans(client_id,started_at,completed_at,incidents_checked,findings_created,status) VALUES(?,?,?,?,?,?)",
-          (client_id,started,utcnow(),len(incidents),created,"completed"))
-        result={"scan_id":cur.lastrowid,"client_id":client_id,"incidents_checked":len(incidents),"new_findings":created,"completed_at":utcnow()}
+          (client_id,started,utcnow(),incidents_checked,created,"completed"))
+        result={"scan_id":cur.lastrowid,"client_id":client_id,"incidents_checked":incidents_checked,"new_findings":created,"completed_at":utcnow()}
     deliveries=[]
     if new_finding_ids:
         from guardian_delivery import deliver_finding
