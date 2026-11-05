@@ -178,7 +178,7 @@ def rss_fetch(feed_name,url):
                 severity={"moderate":"medium"}.get(word,word); break
         mapped=None
         for keyword,target in PACKAGE_KEYWORDS.items():
-            if keyword in combined: mapped=target; break
+            if re.search(r"\\b"+re.escape(keyword)+r"\\b",combined): mapped=target; break
         eco,package=mapped if mapped else (None,None)
         out.append({"id":"rss:"+feed_name+":"+identity,"source":"rss_news","source_id":feed_name+":"+identity,
           "published_at":published_at,"severity":severity,"ecosystem":eco,"package":package,
