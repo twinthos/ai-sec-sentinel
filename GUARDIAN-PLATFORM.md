@@ -39,6 +39,7 @@ Do not expose the API directly to the public internet without TLS termination, r
 - `POST /v1/clients/{id}/scan-github` inspect an authorised GitHub repository's root manifests and supported lockfiles
 - `POST /v1/incidents/{id}/summary` create a locally generated Ollama summary
 - `POST /v1/clients/{id}/components` add a component and exact version
+- `PATCH /v1/clients/{id}/components/{component_id}` update inventory version/criticality; the next scan reconciles findings
 - `POST /v1/incidents` ingest a normalized incident
 - `GET /v1/incidents` global/filterable chronological feed
 - `GET /v1/incidents/timeline-density` density buckets for charting
@@ -54,7 +55,7 @@ All endpoints except `/health` require `X-API-Key`.
 
 A match is confirmed only when the advisory provides a valid affected-version specifier and the inventory has a parseable version within it. Missing version data is shown as potential exposure. A missing affected-version range cannot be promoted to a confirmed match. Package and ecosystem identifiers must be normalised by source adapters; name-only framework detection is not proof of exposure.
 
-The current source adapters ingest NVD CVEs, CISA KEV and GitHub Security Advisories. CISA KEV is exploitation evidence and elevates urgency; it does not provide a complete package/version range. The optional backfill script pages NVD in bounded date windows and GitHub advisories from 2026-01-01: `python guardian_backfill.py --start 2026-01-01 --end 2026-11-05`. It has not been run against live sources in this change, so the 30+ incident target is not yet verified. The GitHub inventory scanner reads public repository manifests and supported lockfiles (package.json/package-lock, requirements.txt/pyproject.toml/poetry.lock, composer.json/composer.lock, go.mod and Cargo files). Private repositories require a server-side GITHUB_TOKEN with least-privilege access. It does not clone or execute repository code, and it does not prove deployed runtime versions.
+The current source adapters ingest NVD CVEs, CISA KEV and GitHub Security Advisories. CISA KEV is exploitation evidence and elevates urgency; it does not provide a complete package/version range. The optional backfill script pages NVD in bounded date windows and GitHub advisories from 2026-01-01 (currently capped at 30 GitHub pages / 3,000 advisory records): `python guardian_backfill.py --start 2026-01-01 --end 2026-11-05`. It has not been run against live sources in this change, so the 30+ incident target is not yet verified. The GitHub inventory scanner reads public repository manifests and supported lockfiles (package.json/package-lock, requirements.txt/pyproject.toml/poetry.lock, composer.json/composer.lock, go.mod and Cargo files). Private repositories require a server-side GITHUB_TOKEN with least-privilege access. It does not clone or execute repository code, and it does not prove deployed runtime versions.
 
 ## Scheduled guardians
 
