@@ -23,7 +23,7 @@ def severity_from_cvss(score):
 
 def nvd_fetch():
     now=datetime.now(timezone.utc); start=(now-timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    params={"lastModStartDate":start,"lastModEndDate":now.strftime("%Y-%m-%dT%H:%M:%S.000"),"resultsPerPage":2000}
+    params={"lastModStartDate":start,"lastModEndDate":now.strftime("%Y-%m-%dT%H:%M:%S.000Z"),"resultsPerPage":2000}
     key=os.getenv("NVD_API_KEY")
     headers=dict(HEADERS)
     if key: headers["apiKey"]=key
