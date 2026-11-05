@@ -3,7 +3,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 SENTINEL_GUARDIAN_DB=/data/guar
 WORKDIR /app
 COPY requirements.txt requirements-guardian.txt ./
 RUN pip install --no-cache-dir -r requirements-guardian.txt && groupadd -r sentinel && useradd -r -g sentinel sentinel
-COPY guardian_platform.py guardian_sources.py ./
+COPY guardian_platform.py guardian_sources.py guardian_stack.py guardian_delivery.py guardian_dashboard.html ./
 RUN mkdir -p /data && chown -R sentinel:sentinel /data
 USER sentinel
 VOLUME ["/data"]
