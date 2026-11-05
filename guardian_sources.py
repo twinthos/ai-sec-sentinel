@@ -92,7 +92,21 @@ def run_source(name, fetcher):
         return {"source":name,"ok":False,"error":str(exc)[:300]}
 
 def run_all():
-    return [run_source(name,fn) for name,fn in SOURCES.items()]
+    results=[run_source(name,fn) for name,fn in SOURCES.items()]
+    # Only scan after source ingestion attempts complete. Failed sources remain
+    # visible in source_state; they are never reported as a clean scan.
+    try:
+        from guardian_platform import scan_client
+        with db() as c:
+            client_ids=[r["id"] for r in c.execute("SELECT id FROM clients")]
+        for client_id in client_ids:
+            try:
+                scan_client(client_id)
+            except Exception as exc:
+                results.append({"client_id":client_id,"scan_ok":False,"error":str(exc)[:200]})
+    except Exception as exc:
+        results.append({"scan_ok":False,"error":str(exc)[:200]})
+    return results
 
 if __name__=="__main__":
     parser=argparse.ArgumentParser(); parser.add_argument("--once",action="store_true"); parser.add_argument("--interval",type=int,default=60)
