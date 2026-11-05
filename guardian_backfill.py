@@ -8,7 +8,7 @@ import argparse, json, os, time
 from datetime import datetime, timezone
 import requests
 from guardian_platform import db, upsert_incident, utcnow
-from guardian_sources import HEADERS, TIMEOUT, severity_from_cvss, iso
+from guardian_sources import HEADERS, TIMEOUT, severity_from_cvss, iso, cpe_products
 
 def nvd_backfill(start,end):
     out=[]; cursor=start
@@ -30,10 +30,14 @@ def nvd_backfill(start,end):
                 for key in ("cvssMetricV40","cvssMetricV31","cvssMetricV30","cvssMetricV2"):
                     if metrics.get(key): score=metrics[key][0].get("cvssData",{}).get("baseScore");break
                 desc=next((x.get("value","") for x in v.get("descriptions",[]) if x.get("lang")=="en"),"")
-                out.append({"id":"nvd:"+v["id"],"source":"nvd","source_id":v["id"],"cve":v["id"],
-                  "published_at":iso(v.get("published")),"modified_at":iso(v.get("lastModified")),
-                  "severity":severity_from_cvss(score),"title":desc[:180] or v["id"],"description":desc,
-                  "references":[x.get("url") for x in v.get("references",[]) if x.get("url")],"raw":v})
+                products=cpe_products(v) or [(None,None,None)]
+                for ecosystem,package,affected in products:
+                    suffix=(":"+str(ecosystem)+":"+str(package)) if package else ""
+                    out.append({"id":"nvd:"+v["id"]+suffix,"source":"nvd","source_id":v["id"]+suffix,"cve":v["id"],
+                      "published_at":iso(v.get("published")),"modified_at":iso(v.get("lastModified")),
+                      "severity":severity_from_cvss(score),"title":desc[:180] or v["id"],"description":desc,
+                      "ecosystem":ecosystem,"package":package,"affected_versions":affected,
+                      "references":[x.get("url") for x in v.get("references",[]) if x.get("url")],"raw":v})
             total=data.get("totalResults",0)
             if page*2000+len(rows)>=total or not rows: break
             page+=1; time.sleep(0.7 if os.getenv("NVD_API_KEY") else 6)
