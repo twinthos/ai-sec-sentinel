@@ -18,13 +18,18 @@ Run source ingestion separately:
 ```sh
 python guardian_sources.py --once
 python guardian_sources.py --interval 60
+# Optional one-time history backfill (can take time; observe source rate limits)
+python guardian_backfill.py --start 2026-01-01 --end 2026-11-05
 ```
 
 Do not expose the API directly to the public internet without TLS termination, rate limiting, secret management, backups and a hardened deployment boundary. The default API binds to loopback in the example. Set a unique API key per deployment; rotate it if exposed.
 
 ## API
 
-- `POST /v1/clients` create client
+- `GET /console` responsive browser dashboard (deployment API key required for API calls)
+- `POST /v1/clients` create client and optional security contact email
+- `POST /v1/clients/{id}/scan-github` inspect an authorised GitHub repository's root manifests and supported lockfiles
+- `POST /v1/incidents/{id}/summary` create a locally generated Ollama summary
 - `POST /v1/clients/{id}/components` add a component and exact version
 - `POST /v1/incidents` ingest a normalized incident
 - `GET /v1/incidents` global/filterable chronological feed
@@ -41,7 +46,7 @@ All endpoints except `/health` require `X-API-Key`.
 
 A match is confirmed only when the advisory provides a valid affected-version specifier and the inventory has a parseable version within it. Missing version data is shown as potential exposure. A missing affected-version range cannot be promoted to a confirmed match. Package and ecosystem identifiers must be normalised by source adapters; name-only framework detection is not proof of exposure.
 
-The current source adapters ingest NVD CVEs, CISA KEV and GitHub Security Advisories. CISA KEV is exploitation evidence and elevates urgency; it does not provide a complete package/version range. The source adapters preserve source references and raw records for later parser improvements. Feed pagination, historical backfill, source-specific ecosystem mapping and vendor-blog parsers remain follow-on work.
+The current source adapters ingest NVD CVEs, CISA KEV and GitHub Security Advisories. CISA KEV is exploitation evidence and elevates urgency; it does not provide a complete package/version range. The optional backfill script pages NVD in bounded date windows and GitHub advisories from 2026-01-01: `python guardian_backfill.py --start 2026-01-01 --end 2026-11-05`. It has not been run against live sources in this change, so the 30+ incident target is not yet verified. The GitHub inventory scanner reads public repository manifests and supported lockfiles (package.json/package-lock, requirements.txt/pyproject.toml/poetry.lock, composer.json/composer.lock, go.mod and Cargo files). Private repositories require a server-side GITHUB_TOKEN with least-privilege access. It does not clone or execute repository code, and it does not prove deployed runtime versions.
 
 ## Scheduled guardians
 
@@ -50,9 +55,13 @@ The source runner supports an hourly loop and triggers client matching after eac
 ## Security and privacy boundaries
 
 - Client API key is a single deployment-level shared credential in this first slice, not full multi-tenant identity. Use behind a trusted gateway until per-client principals, key rotation and role-based access are implemented.
+- The browser console keeps the deployment API key in memory only (not localStorage). Do not use the console on an untrusted or shared device.
+- Email alerts require SENTINEL_SMTP_HOST, SENTINEL_SMTP_FROM, SENTINEL_SMTP_PORT and optional SENTINEL_SMTP_USER / SENTINEL_SMTP_PASSWORD. The client's contact_email is stored in SQLite; protect database files and backups.
+- Slack operations alerts require SENTINEL_SLACK_WEBHOOK_URL to be a Slack incoming webhook. This is one configured operations destination, not per-customer Slack routing. Failed deliveries can be retried via the client API.
+- Ollama summaries require a local Ollama service and OLLAMA_MODEL (default qwen2.5:3b). The endpoint is restricted to loopback; generated text is labelled and original advisory fields remain authoritative.
 - No automated remediation or package changes are performed.
 - No active port scanning, exploit testing, credential collection or intrusive website probing is included.
 - The API does not claim that website fingerprinting is reliable. Add passive URL/repository inventory only with client authorisation, DNS/IP egress controls, redirect validation and evidence confidence labels.
 - PDF is a basic findings report, not a compliance certificate.
-- Ollama summarisation, Slack/email delivery, full MCP stdio tools, stack fingerprinting, monthly trend narrative and authenticated client UI are not implemented in this slice.
+- Website fingerprinting (headers, robots.txt, sitemap, DNS, WHOIS and SSL), per-customer Slack destinations, role-based client login, monthly trend narrative and fully isolated tenant credentials are not implemented. The console is an operator console authenticated with the deployment key, not a customer self-service portal.
 - Keep original advisories as source of truth; AI summaries must be labelled generated and never alter severity, affected ranges or fix versions.
