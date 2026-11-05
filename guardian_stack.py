@@ -164,7 +164,14 @@ def extract_manifests(tree, get_file):
             name,sep,tag=image.rpartition(":")
             if not sep or "/" in tag: name,tag=image,None
             package=name.split("/")[-1].lower()
-            if package: add("docker",package,tag if tag and not tag.startswith("$") else None,"Dockerfile FROM")
+            if package:
+                image_version=tag if tag and not tag.startswith("$") else None
+                add("docker",package,image_version,"Dockerfile FROM")
+                canonical={"nginx":("nginx","nginx"),"php":("php","php"),"node":("nodejs","node.js"),
+                  "nodejs":("nodejs","node.js"),"python":("python","python"),"wordpress":("wordpress","wordpress")}
+                if package in canonical:
+                    eco,canonical_package=canonical[package]
+                    add(eco,canonical_package,image_version,"Dockerfile FROM canonical runtime")
     if "go.mod" in paths:
         for line in get_file("go.mod").splitlines():
             m=re.match(r"\s*([^\s]+)\s+(v\d+\.\d+\.\d+(?:[-+][^\s]+)?)",line)
