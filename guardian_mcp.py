@@ -34,7 +34,7 @@ def call(name,args):
             known=c.execute("SELECT count(*) FROM components WHERE client_id=? AND version IS NOT NULL",(cid,)).fetchone()[0]
             counts={r["status"]:r["n"] for r in c.execute("SELECT status,count(*) n FROM findings WHERE client_id=? GROUP BY status",(cid,))}
             last=c.execute("SELECT completed_at FROM scans WHERE client_id=? ORDER BY id DESC LIMIT 1",(cid,)).fetchone()
-            return {"client":dict(client),"active_threats":counts.get("open",0)+counts.get("in_progress",0),"resolved_threats":counts.get("resolved",0),"components":total,"stack_coverage_pct":round(known/total*100,1) if total else 0,"last_scan_at":last["completed_at"] if last else None}
+            return {"client":dict(client),"active_threats":counts.get("open",0)+counts.get("in_progress",0),"resolved_threats":counts.get("resolved",0),"components":total,"version_inventory_completeness_pct":round(known/total*100,1) if total else 0,"last_scan_at":last["completed_at"] if last else None}
     if name=="sentinel_client_findings":
         sql="""SELECT f.id,f.match_state,f.status,f.owner,f.due_at,i.cve,i.title,i.severity,i.package,i.ecosystem,i.affected_versions,i.fixed_version,i.remediation,i.exploited
         FROM findings f JOIN incidents i ON i.id=f.incident_id WHERE f.client_id=?"""
