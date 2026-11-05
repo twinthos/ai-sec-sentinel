@@ -32,6 +32,13 @@ class PlatformTests(unittest.TestCase):
         fid=rows[0]["id"]
         self.assertEqual(self.client.patch(f"/v1/findings/{fid}",headers=self.h,json={"status":"resolved","owner":"Ops"}).status_code,200)
         self.assertEqual(self.client.get(f"/v1/clients/{cid}/dashboard",headers=self.h).json()["resolved_threats"],1)
+    def test_unmapped_kev_does_not_match_every_component(self):
+        client=self.client.post("/v1/clients",headers=self.h,json={"name":"No false positives"}).json()
+        cid=client["id"]
+        self.client.post(f"/v1/clients/{cid}/components",headers=self.h,json={"ecosystem":"npm","package":"react","version":"18.2.0"})
+        self.client.post("/v1/incidents",headers=self.h,json={"id":"cisa-kev:CVE-2026-0001","source":"cisa_kev","source_id":"CVE-2026-0001","published_at":"2026-11-05T00:00:00Z","severity":"critical","cve":"CVE-2026-0001","title":"Unmapped KEV"})
+        scan=self.client.post(f"/v1/clients/{cid}/scan",headers=self.h).json()
+        self.assertEqual(scan["new_findings"],0)
     def test_incident_filter(self):
         self.client.post("/v1/incidents",headers=self.h,json={"id":"test:1","source":"test","published_at":"2026-11-05T00:00:00Z","severity":"critical","title":"Test"})
         self.assertEqual(len(self.client.get("/v1/incidents?severity=critical",headers=self.h).json()),1)
