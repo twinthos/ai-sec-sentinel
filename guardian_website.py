@@ -76,7 +76,7 @@ def detect(url):
         m=re.search(r"php/?([0-9]+(?:\.[0-9]+){1,2})",powered)
         add("php","php",m.group(1) if m else None,"X-Powered-By header")
     if "wp-content/" in text or "wp-includes/" in text or "wordpress" in text:
-        m=re.search(r'<meta[^>]+name=["\\']generator["\\'][^>]+content=["\\']wordpress ([0-9.]+)',html,re.I)
+        m=re.search(r"""<meta[^>]+name=["']generator["'][^>]+content=["']wordpress ([0-9.]+)""",html,re.I)
         add("wordpress","wordpress",m.group(1) if m else None,"WordPress HTML fingerprint")
     if "/_next/" in text or "__next_data__" in text:
         add("npm","next",None,"Next.js asset / data fingerprint")
