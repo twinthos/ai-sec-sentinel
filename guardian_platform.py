@@ -421,6 +421,42 @@ def summarize_incident(incident_id: str):
     except Exception as exc:
         raise HTTPException(503,"Local Ollama summary unavailable: "+str(exc)[:180])
 
+@app.get("/v1/clients/{client_id}/monthly-report", dependencies=[Depends(require_key)])
+def monthly_report(client_id: str, month: Optional[str]=None):
+    with db() as c:
+        client=c.execute("SELECT id,name,region FROM clients WHERE id=?",(client_id,)).fetchone()
+        if not client: raise HTTPException(404,"Client not found")
+        chosen=month or datetime.now(timezone.utc).strftime("%Y-%m")
+        try:
+            start_dt=datetime.strptime(chosen,"%Y-%m").replace(tzinfo=timezone.utc)
+        except ValueError: raise HTTPException(422,"month must use YYYY-MM")
+        if start_dt.month==12: next_dt=start_dt.replace(year=start_dt.year+1,month=1)
+        else: next_dt=start_dt.replace(month=start_dt.month+1)
+        prev_dt=start_dt.replace(day=1)
+        if prev_dt.month==1: prev_dt=prev_dt.replace(year=prev_dt.year-1,month=12)
+        else: prev_dt=prev_dt.replace(month=prev_dt.month-1)
+        start=start_dt.isoformat(); end=next_dt.isoformat(); prev=prev_dt.isoformat()
+        current=c.execute("""SELECT i.severity,count(DISTINCT i.id) n FROM findings f JOIN incidents i ON i.id=f.incident_id
+          WHERE f.client_id=? AND i.published_at>=? AND i.published_at<? GROUP BY i.severity""",(client_id,start,end)).fetchall()
+        previous=c.execute("""SELECT count(DISTINCT i.id) n FROM findings f JOIN incidents i ON i.id=f.incident_id
+          WHERE f.client_id=? AND i.published_at>=? AND i.published_at<?""",(client_id,prev,start)).fetchone()["n"]
+        total=sum(r["n"] for r in current)
+        resolved=c.execute("""SELECT count(*) FROM findings f JOIN incidents i ON i.id=f.incident_id
+          WHERE f.client_id=? AND f.status='resolved' AND i.published_at>=? AND i.published_at<?""",(client_id,start,end)).fetchone()[0]
+        active=c.execute("SELECT count(*) FROM findings WHERE client_id=? AND status IN ('open','in_progress')",(client_id,)).fetchone()[0]
+        top=[dict(r) for r in c.execute("""SELECT i.package,count(DISTINCT i.id) incidents FROM findings f JOIN incidents i ON i.id=f.incident_id
+          WHERE f.client_id=? AND i.published_at>=? AND i.published_at<? AND i.package IS NOT NULL GROUP BY i.package ORDER BY incidents DESC LIMIT 5""",(client_id,start,end))]
+        by_severity={r["severity"]:r["n"] for r in current}
+        recommendations=[]
+        if by_severity.get("critical",0): recommendations.append("Prioritise all critical findings immediately and verify whether exploitation is active.")
+        if by_severity.get("high",0): recommendations.append("Schedule high-severity fixes within the next working week.")
+        if active: recommendations.append("Assign owners and target dates to all remaining active findings.")
+        if not recommendations: recommendations.append("Maintain patch cadence and re-scan after dependency or infrastructure changes.")
+        return {"client":dict(client),"month":chosen,"incidents":total,"previous_month_incidents":previous,
+          "month_on_month_change":total-previous,"by_severity":by_severity,"resolved_this_month":resolved,
+          "active_findings":active,"most_affected_packages":top,"recommendations":recommendations,
+          "generated_at":utcnow(),"note":"Counts reflect incidents matched to the recorded client inventory, not every incident in the global feed."}
+
 @app.get("/v1/clients/{client_id}/export.json", dependencies=[Depends(require_key)])
 def export_json(client_id: str):
     return {"dashboard":dashboard(client_id),"components":list_components(client_id),"findings":findings(client_id)}
