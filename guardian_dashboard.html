@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Twinthos Sentinel — Guardian Console</title>
+<meta name="description" content="Global security incident intelligence and client Guardian monitoring.">
+<style>
+:root{color-scheme:dark;--bg:#080a0e;--panel:#10141b;--line:#252d39;--muted:#8d99aa;--text:#eef2f7;--green:#b5ef69;--red:#ff7474;--amber:#ffc56b;--blue:#8bbcff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 75% -20%,#1c2832 0,transparent 45%),var(--bg);color:var(--text);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}
+header{padding:28px clamp(18px,4vw,56px);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:20px;align-items:center;flex-wrap:wrap}
+.brand{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}h1{font-size:clamp(26px,4vw,42px);letter-spacing:-.045em;line-height:1.04;margin:12px 0 8px}p{color:var(--muted);margin:0}
+main{max-width:1440px;margin:auto;padding:28px clamp(16px,4vw,56px) 70px}
+button,input,select{font:inherit;color:inherit;background:#0b0f15;border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+button{cursor:pointer}button.primary{background:var(--green);border-color:var(--green);color:#10150b;font-weight:700}
+button:hover{border-color:#718094}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.connect{display:flex;gap:8px;flex-wrap:wrap}.connect input{min-width:260px}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:24px 0}
+.panel,.metric{background:linear-gradient(145deg,#121821,#0d1117);border:1px solid var(--line);border-radius:14px}
+.metric{padding:18px}.metric label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}.metric strong{display:block;font-size:32px;letter-spacing:-.04em;margin-top:8px}
+.section{margin-top:24px}.section-head{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:12px;flex-wrap:wrap}h2{font-size:18px;letter-spacing:-.02em;margin:0}.panel{padding:18px}
+.filters{display:flex;gap:8px;flex-wrap:wrap}.timeline{display:flex;gap:8px;align-items:end;overflow-x:auto;min-height:150px;padding:12px 0 4px}
+.bucket{min-width:54px;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--muted);font-size:10px}
+.bar{width:28px;min-height:2px;border-radius:5px 5px 2px 2px;background:linear-gradient(180deg,var(--green),#5d8650);position:relative}
+.bar span{position:absolute;top:-20px;left:0;right:0;text-align:center;color:var(--text);font-size:11px}
+table{width:100%;border-collapse:collapse;min-width:800px}th{text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:600;padding:12px;border-bottom:1px solid var(--line)}
+td{padding:13px 12px;border-bottom:1px solid #1d2530;vertical-align:top}tr:last-child td{border-bottom:0}.table-wrap{overflow:auto}
+.pill{display:inline-flex;padding:3px 8px;border:1px solid var(--line);border-radius:30px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;white-space:nowrap}
+.critical{color:var(--red);border-color:#713d43}.high{color:var(--amber);border-color:#6d5537}.medium{color:var(--blue)}.low{color:var(--green)}
+.muted{color:var(--muted)}.small{font-size:12px}.actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.empty{padding:32px;text-align:center;color:var(--muted)}
+#message{font-size:12px;color:var(--muted);padding:8px 0}.danger{color:var(--red)}
+@media(max-width:800px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.metric strong{font-size:26px}}
+@media(max-width:480px){header{padding-top:20px}.grid{gap:8px}.metric{padding:13px}.metric strong{font-size:23px}.panel{padding:12px}.connect input{min-width:100%;width:100%}}
+</style></head>
+<body>
+<header><div><div class="brand">Twinthos / Sentinel</div><h1>Guardian Console</h1><p>Global incident intelligence · Client exposure · Remediation control</p></div>
+<div class="connect"><input id="apiKey" type="password" autocomplete="off" placeholder="Deployment API key" aria-label="Deployment API key"><button class="primary" id="connect">Connect</button></div></header>
+<main>
+<div id="message" role="status">Enter your deployment API key to load Guardian data. The key remains in this browser tab and is not persisted.</div>
+<section class="toolbar"><select id="client"><option value="">Global incident view</option></select><button id="refresh">Refresh data</button><a id="json" href="#" style="color:var(--green);padding:10px">JSON export</a><a id="csv" href="#" style="color:var(--green);padding:10px">CSV export</a><a id="pdf" href="#" style="color:var(--green);padding:10px">PDF report</a></section>
+<div class="grid">
+<div class="metric"><label>Active threats</label><strong id="active">—</strong></div><div class="metric"><label>Resolved threats</label><strong id="resolved">—</strong></div><div class="metric"><label>Stack components</label><strong id="components">—</strong></div><div class="metric"><label>Version inventory</label><strong id="coverage">—</strong></div>
+</div>
+<section class="section"><div class="section-head"><div><h2>Incident density</h2><p class="small">Chronological count of incidents in the selected view</p></div><select id="bucket"><option value="month">Monthly</option><option value="week">Weekly</option><option value="day">Daily</option></select></div><div class="panel"><div class="timeline" id="timeline"><div class="empty">Connect to load timeline</div></div></div></section>
+<section class="section"><div class="section-head"><div><h2>Incident intelligence</h2><p class="small">Source-linked advisories and vulnerabilities</p></div><div class="filters"><input id="framework" placeholder="Framework / package"><select id="severity"><option value="">All severities</option><option>critical</option><option>high</option><option>medium</option><option>low</option></select><input id="start" type="date" aria-label="Start date"><input id="end" type="date" aria-label="End date"><button id="filter">Apply filters</button></div></div>
+<div class="panel table-wrap"><table><thead><tr><th>Published</th><th>Severity</th><th>Incident</th><th>Component</th><th>Fix</th><th>Source</th></tr></thead><tbody id="incidents"><tr><td colspan="6" class="empty">No data loaded</td></tr></tbody></table></div></section>
+<section class="section"><div class="section-head"><div><h2>Guardian findings</h2><p class="small">Client-specific exposure and remediation tracking</p></div><select id="status"><option value="">All statuses</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="accepted_risk">Accepted risk</option></select></div>
+<div class="panel table-wrap"><table><thead><tr><th>Urgency</th><th>Incident</th><th>Component / version</th><th>Match</th><th>Remediation</th><th>Owner / due</th><th>Status</th></tr></thead><tbody id="findings"><tr><td colspan="7" class="empty">Select a client to view Guardian findings</td></tr></tbody></table></div></section>
+<section class="section"><div class="section-head"><div><h2>Feed health</h2><p class="small">Last successful source ingestion and any reported errors</p></div></div><div class="panel table-wrap"><table><thead><tr><th>Source</th><th>Last success</th><th>Status</th><th>Details</th></tr></thead><tbody id="sources"><tr><td colspan="4" class="empty">Connect to load source status</td></tr></tbody></table></div></section>
+</main>
+<script>
+(()=>{'use strict';
+let key='',selected='',clients=[],findings=[];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const api=async(path,opts={})=>{const r=await fetch(path,{...opts,headers:{'X-API-Key':key,'Content-Type':'application/json',...(opts.headers||{})}});if(!r.ok)throw new Error((await r.text()).slice(0,250)||r.statusText);return r.json()};
+const say=(s,bad=false)=>{$('message').textContent=s;$('message').className=bad?'danger':''};
+function setExportLinks(){for(const ext of ['json','csv','pdf']){$(ext).href=selected?'/v1/clients/'+encodeURIComponent(selected)+'/export.'+ext:'#';$(ext).style.opacity=selected?'1':'.35'}}
+async function connect(){key=$('apiKey').value.trim();if(!key){say('Enter the API key.',true);return}try{clients=await api('/v1/clients');$('client').innerHTML='<option value="">Global incident view</option>'+clients.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>').join('');say('Connected. Select a client or inspect the global incident feed.');await load()}catch(e){key='';say('Connection failed: '+e.message,true)}}
+async function load(){if(!key)return;selected=$('client').value;setExportLinks();try{const [inc,src,density]=await Promise.all([loadIncidents(),api('/v1/sources'),api('/v1/incidents/timeline-density?bucket='+$('bucket').value+(selected?'&client_id='+encodeURIComponent(selected):''))]);renderIncidents(inc);renderSources(src);renderDensity(density);if(selected){const [dash,rows]=await Promise.all([api('/v1/clients/'+encodeURIComponent(selected)+'/dashboard'),api('/v1/clients/'+encodeURIComponent(selected)+'/findings'+($('status').value?'?status='+$('status').value:''))]);$('active').textContent=dash.active_threats;$('resolved').textContent=dash.resolved_threats;$('components').textContent=dash.components;$('coverage').textContent=dash.version_inventory_completeness_pct+'%';findings=rows;renderFindings(rows)}else{$('active').textContent='—';$('resolved').textContent='—';$('components').textContent='—';$('coverage').textContent='—';$('findings').innerHTML='<tr><td colspan="7" class="empty">Select a client to view Guardian findings</td></tr>'}say('Updated '+new Date().toLocaleTimeString())}catch(e){say('Could not load dashboard: '+e.message,true)}}
+async function loadIncidents(){const q=new URLSearchParams();if($('framework').value)q.set('framework',$('framework').value);if($('severity').value)q.set('severity',$('severity').value);if($('start').value)q.set('start',$('start').value+'T00:00:00Z');if($('end').value)q.set('end',$('end').value+'T23:59:59Z');if(selected)q.set('client_id',selected);q.set('limit','500');return api('/v1/incidents?'+q.toString())}
+function renderIncidents(rows){$('incidents').innerHTML=rows.length?rows.map(x=>'<tr><td>'+esc((x.published_at||'').slice(0,10))+'</td><td><span class="pill '+esc(x.severity)+'">'+esc(x.severity)+'</span></td><td><strong>'+esc(x.cve||x.id)+'</strong><div class="small muted">'+esc(x.title)+'</div></td><td>'+esc(x.package||x.ecosystem||'Unmapped')+'</td><td>'+esc(x.fixed_version||'Not specified')+'</td><td>'+esc(x.source)+'</td></tr>').join(''):'<tr><td colspan="6" class="empty">No matching incidents</td></tr>'}
+function renderDensity(rows){const max=Math.max(1,...rows.map(x=>x.count));$('timeline').innerHTML=rows.length?rows.map(x=>'<div class="bucket"><div class="bar" style="height:'+Math.max(3,100*x.count/max)+'px"><span>'+x.count+'</span></div><span>'+esc(x.period)+'</span></div>').join(''):'<div class="empty">No incident density data yet</div>'}
+function renderFindings(rows){$('findings').innerHTML=rows.length?rows.map(x=>'<tr><td><span class="pill '+esc(x.severity)+'">'+esc(x.urgency)+'</span></td><td><strong>'+esc(x.cve||x.title)+'</strong><div class="small muted">'+esc(x.title)+'</div></td><td>'+esc(x.package||'—')+' <span class="muted">'+esc(x.component_version)+'</span></td><td>'+esc(x.match_state)+'<div class="small muted">'+esc(x.match_confidence)+'</div></td><td>'+esc(x.remediation||'Review vendor advisory')+'</td><td>'+esc(x.owner||'Unassigned')+'<div class="small muted">'+esc(x.due_at||'No deadline')+'</div></td><td><select data-id="'+x.id+'" class="finding-status">'+['open','in_progress','resolved','accepted_risk'].map(s=>'<option value="'+s+'" '+(s===x.status?'selected':'')+'>'+s.replace('_',' ')+'</option>').join('')+'</select></td></tr>').join(''):'<tr><td colspan="7" class="empty">No Guardian findings for this client</td></tr>'}
+function renderSources(rows){$('sources').innerHTML=rows.length?rows.map(x=>'<tr><td>'+esc(x.source)+'</td><td>'+esc(x.last_success||'Never')+'</td><td><span class="pill '+(x.error?'critical':'low')+'">'+(x.error?'Error':'Healthy')+'</span></td><td class="small">'+esc(x.error||('Records received: '+(x.cursor||'—')))+'</td></tr>').join(''):'<tr><td colspan="4" class="empty">No ingestion runs recorded</td></tr>'}
+$('connect').addEventListener('click',connect);$('refresh').addEventListener('click',load);$('client').addEventListener('change',load);$('bucket').addEventListener('change',load);$('filter').addEventListener('click',load);$('status').addEventListener('change',load);
+$('findings').addEventListener('change',async e=>{if(!e.target.matches('.finding-status'))return;try{await api('/v1/findings/'+e.target.dataset.id,{method:'PATCH',body:JSON.stringify({status:e.target.value})});say('Remediation status updated.');await load()}catch(err){say('Update failed: '+err.message,true)}});
+})();
+</script></body></html>
