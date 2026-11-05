@@ -11,6 +11,10 @@ class PlatformTests(unittest.TestCase):
         self.client=TestClient(gp.app)
         self.h={"X-API-Key":"test-key"}
     def tearDown(self): self.tmp.cleanup()
+    def test_console_is_served_and_client_contact_is_saved(self):
+        self.assertEqual(self.client.get("/console").status_code,200)
+        client=self.client.post("/v1/clients",headers=self.h,json={"name":"Contact Ltd","contact_email":"security@example.com"}).json()
+        self.assertEqual(client["contact_email"],"security@example.com")
     def test_api_key_required(self):
         self.assertEqual(self.client.get("/v1/clients").status_code,401)
     def test_confirmed_and_unknown_version_matching(self):
