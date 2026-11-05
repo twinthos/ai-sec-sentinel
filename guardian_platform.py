@@ -222,9 +222,13 @@ def scan_client(client_id: str):
         incidents=[dict(r) for r in c.execute("SELECT * FROM incidents")]
         created=0
         for inc in incidents:
+            # Never fan out an unmapped CVE/KEV record to every customer asset.
+            # CPE/package enrichment is required before it can be matched safely.
+            if not inc["package"] or not inc["ecosystem"]:
+                continue
             for comp in components:
-                if inc["package"] and inc["package"].lower()!=comp["package"].lower(): continue
-                if inc["ecosystem"] and inc["ecosystem"].lower()!=comp["ecosystem"].lower(): continue
+                if inc["package"].lower()!=comp["package"].lower(): continue
+                if inc["ecosystem"].lower()!=comp["ecosystem"].lower(): continue
                 state=version_matches(comp["version"],inc["affected_versions"])
                 if state=="not_affected": continue
                 if state=="unknown" and inc["affected_versions"]: state="potential"
