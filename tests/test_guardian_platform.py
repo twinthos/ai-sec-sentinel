@@ -36,6 +36,17 @@ class PlatformTests(unittest.TestCase):
         fid=rows[0]["id"]
         self.assertEqual(self.client.patch(f"/v1/findings/{fid}",headers=self.h,json={"status":"resolved","owner":"Ops"}).status_code,200)
         self.assertEqual(self.client.get(f"/v1/clients/{cid}/dashboard",headers=self.h).json()["resolved_threats"],1)
+    def test_patched_component_auto_resolves_matching_finding(self):
+        client=self.client.post("/v1/clients",headers=self.h,json={"name":"Patched Ltd"}).json()
+        cid=client["id"]
+        component=self.client.post(f"/v1/clients/{cid}/components",headers=self.h,json={"ecosystem":"pypi","package":"django","version":"4.2.1"}).json()
+        self.client.post("/v1/incidents",headers=self.h,json={"id":"ghsa:patch:django","source":"github_advisory","source_id":"GHSA-patch-django","published_at":"2026-11-05T00:00:00Z","severity":"high","ecosystem":"pypi","package":"django","title":"Patch test","affected_versions":"<4.2.2","fixed_version":"4.2.2"})
+        self.client.post(f"/v1/clients/{cid}/scan",headers=self.h)
+        self.assertEqual(self.client.get(f"/v1/clients/{cid}/dashboard",headers=self.h).json()["active_threats"],1)
+        self.client.patch(f"/v1/clients/{cid}/components/{component['id']}",headers=self.h,json={"version":"4.2.2"})
+        self.client.post(f"/v1/clients/{cid}/scan",headers=self.h)
+        self.assertEqual(self.client.get(f"/v1/clients/{cid}/dashboard",headers=self.h).json()["active_threats"],0)
+        self.assertEqual(self.client.get(f"/v1/clients/{cid}/dashboard",headers=self.h).json()["resolved_threats"],1)
     def test_unmapped_kev_does_not_match_every_component(self):
         client=self.client.post("/v1/clients",headers=self.h,json={"name":"No false positives"}).json()
         cid=client["id"]
