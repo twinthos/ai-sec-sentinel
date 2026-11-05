@@ -4,7 +4,15 @@ This additive service introduces a global incident timeline and client-specific 
 
 ## Start
 
-Install the additional API/report dependencies:
+For a container deployment, copy `.env.guardian.example` to `.env`, replace the API key with a random secret, then run:
+
+```sh
+docker compose --env-file .env -f docker-compose.guardian.yml up --build -d
+```
+
+Open `http://127.0.0.1:8099/console` on the host and enter the deployment API key. The console is an operator interface, not a customer login portal.
+
+For a local Python deployment, install the additional API/report dependencies:
 
 ```sh
 python -m pip install -r requirements-guardian.txt
