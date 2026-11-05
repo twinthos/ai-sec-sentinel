@@ -56,30 +56,30 @@ def cpe_products(cve):
 def nvd_fetch():
     now=datetime.now(timezone.utc); start=(now-timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     params={"lastModStartDate":start,"lastModEndDate":now.strftime("%Y-%m-%dT%H:%M:%S.000Z"),"resultsPerPage":2000}
-    key=os.getenv("NVD_API_KEY")
-    headers=dict(HEADERS)
+    key=os.getenv("NVD_API_KEY"); headers=dict(HEADERS)
     if key: headers["apiKey"]=key
-    response=requests.get("https://services.nvd.nist.gov/rest/json/cves/2.0",params=params,headers=headers,timeout=TIMEOUT)
-    response.raise_for_status()
-    out=[]
-    for row in response.json().get("vulnerabilities",[]):
-        v=row.get("cve",{}); metrics=v.get("metrics",{})
-        score=None
-        for k in ("cvssMetricV40","cvssMetricV31","cvssMetricV30","cvssMetricV2"):
-            if metrics.get(k): score=metrics[k][0].get("cvssData",{}).get("baseScore"); break
-        desc=next((x.get("value","") for x in v.get("descriptions",[]) if x.get("lang")=="en"),"")
-        refs=[x.get("url") for x in v.get("references",[]) if x.get("url")]
-        cve=v.get("id")
-        products=cpe_products(v)
-        if not products:
-            products=[(None,None,None)]
-        for ecosystem,package,affected in products:
-            suffix=(":"+str(ecosystem)+":"+str(package)) if package else ""
-            out.append({"id":"nvd:"+str(cve)+suffix,"source":"nvd","source_id":str(cve)+suffix,"cve":cve,
-              "published_at":iso(v.get("published")),"modified_at":iso(v.get("lastModified")),
-              "severity":severity_from_cvss(score),"title":(desc[:180] or cve),"description":desc,
-              "ecosystem":ecosystem,"package":package,"affected_versions":affected,
-              "references":refs,"raw":v})
+    out=[]; start_index=0
+    while True:
+        params["startIndex"]=start_index
+        response=requests.get("https://services.nvd.nist.gov/rest/json/cves/2.0",params=params,headers=headers,timeout=TIMEOUT)
+        response.raise_for_status(); data=response.json()
+        for row in data.get("vulnerabilities",[]):
+            v=row.get("cve",{}); metrics=v.get("metrics",{}); score=None
+            for k in ("cvssMetricV40","cvssMetricV31","cvssMetricV30","cvssMetricV2"):
+                if metrics.get(k): score=metrics[k][0].get("cvssData",{}).get("baseScore"); break
+            desc=next((x.get("value","") for x in v.get("descriptions",[]) if x.get("lang")=="en"),"")
+            refs=[x.get("url") for x in v.get("references",[]) if x.get("url")]
+            cve=v.get("id"); products=cpe_products(v) or [(None,None,None)]
+            for ecosystem,package,affected in products:
+                suffix=(":"+str(ecosystem)+":"+str(package)) if package else ""
+                out.append({"id":"nvd:"+str(cve)+suffix,"source":"nvd","source_id":str(cve)+suffix,"cve":cve,
+                  "published_at":iso(v.get("published")),"modified_at":iso(v.get("lastModified")),
+                  "severity":severity_from_cvss(score),"title":(desc[:180] or cve),"description":desc,
+                  "ecosystem":ecosystem,"package":package,"affected_versions":affected,"references":refs,"raw":v})
+        count=len(data.get("vulnerabilities",[])); total=data.get("totalResults",0)
+        if not count or start_index+count>=total: break
+        start_index+=count
+        time.sleep(0.7 if key else 6)
     return out
 
 def kev_fetch():
@@ -95,24 +95,33 @@ def kev_fetch():
     return out
 
 def github_fetch():
-    r=requests.get("https://api.github.com/advisories",params={"per_page":100,"sort":"published","direction":"desc"},
-      headers={**HEADERS,"Accept":"application/vnd.github+json"},timeout=TIMEOUT)
-    r.raise_for_status(); out=[]
-    for v in r.json():
-        cve=v.get("cve_id"); ghsa=v.get("ghsa_id")
-        refs=[x.get("url") for x in v.get("references",[]) if x.get("url")]
-        for vref in v.get("vulnerabilities",[]):
-            pkg=vref.get("package") or {}; rng=vref.get("vulnerable_version_range")
-            fix=vref.get("first_patched_version") or {}
-            ecosystem=pkg.get("ecosystem"); name=pkg.get("name")
-            out.append({"id":"github:"+str(ghsa)+":"+str(ecosystem)+":"+str(name),"source":"github_advisory",
-              "source_id":str(ghsa)+":"+str(ecosystem)+":"+str(name),"cve":cve,"published_at":iso(v.get("published_at")),
-              "modified_at":iso(v.get("updated_at")),"severity":{"moderate":"medium"}.get((v.get("severity") or "unknown").lower(),(v.get("severity") or "unknown").lower()),
-              "ecosystem":str(ecosystem or "").lower(),"package":str(name or "").lower(),
-              "title":v.get("summary") or ghsa,"description":v.get("description") or "",
-              "affected_versions":rng,"fixed_version":fix.get("identifier"),
-              "remediation":("Upgrade "+str(name)+" to "+str(fix.get("identifier")) if fix.get("identifier") else "Review the linked vendor advisory and upgrade to a patched release."),
-              "references":refs,"raw":v})
+    out=[]; since=datetime.now(timezone.utc)-timedelta(days=2); stop=False
+    headers={**HEADERS,"Accept":"application/vnd.github+json"}
+    if os.getenv("GITHUB_TOKEN"): headers["Authorization"]="Bearer "+os.getenv("GITHUB_TOKEN")
+    for page in range(1,11):
+        r=requests.get("https://api.github.com/advisories",params={"per_page":100,"page":page,"sort":"published","direction":"desc"},
+          headers=headers,timeout=TIMEOUT); r.raise_for_status(); rows=r.json()
+        if not rows: break
+        for v in rows:
+            published=v.get("published_at")
+            if not published: continue
+            if datetime.fromisoformat(published.replace("Z","+00:00"))<since:
+                stop=True; continue
+            cve=v.get("cve_id"); ghsa=v.get("ghsa_id")
+            refs=[x.get("url") for x in v.get("references",[]) if x.get("url")]
+            for vref in v.get("vulnerabilities",[]):
+                pkg=vref.get("package") or {}; rng=vref.get("vulnerable_version_range")
+                fix=vref.get("first_patched_version") or {}; ecosystem=pkg.get("ecosystem"); name=pkg.get("name")
+                out.append({"id":"github:"+str(ghsa)+":"+str(ecosystem)+":"+str(name),"source":"github_advisory",
+                  "source_id":str(ghsa)+":"+str(ecosystem)+":"+str(name),"cve":cve,"published_at":iso(published),
+                  "modified_at":iso(v.get("updated_at")),"severity":{"moderate":"medium"}.get((v.get("severity") or "unknown").lower(),(v.get("severity") or "unknown").lower()),
+                  "ecosystem":str(ecosystem or "").lower(),"package":str(name or "").lower(),
+                  "title":v.get("summary") or ghsa,"description":v.get("description") or "",
+                  "affected_versions":rng,"fixed_version":fix.get("identifier"),
+                  "remediation":("Upgrade "+str(name)+" to "+str(fix.get("identifier")) if fix.get("identifier") else "Review the linked vendor advisory and upgrade to a patched release."),
+                  "references":refs,"raw":v})
+        if stop: break
+        time.sleep(0.2)
     return out
 
 SOURCES={"nvd":nvd_fetch,"cisa_kev":kev_fetch,"github_advisory":github_fetch}
