@@ -401,7 +401,7 @@ def summarize_incident(incident_id: str):
         if not row: raise HTTPException(404,"Incident not found")
         host=os.getenv("OLLAMA_HOST","http://127.0.0.1:11434").rstrip("/")
         parsed_host=urlparse(host)
-        if parsed_host.scheme!="http" or parsed_host.hostname not in {"127.0.0.1","localhost","::1"} or parsed_host.port not in {None,11434}:
+        if parsed_host.scheme!="http" or parsed_host.hostname not in {"127.0.0.1","localhost","::1","host.docker.internal"} or parsed_host.port not in {None,11434}:
             raise HTTPException(503,"OLLAMA_HOST must point to local Ollama on port 11434")
         model=os.getenv("OLLAMA_MODEL","qwen2.5:3b")
         source=dict(row); source["references"]=json.loads(source.pop("references_json"))
