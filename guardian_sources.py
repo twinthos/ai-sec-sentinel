@@ -21,6 +21,38 @@ def severity_from_cvss(score):
     except (TypeError,ValueError): return "unknown"
     return "critical" if score>=9 else "high" if score>=7 else "medium" if score>=4 else "low"
 
+CPE_MAP={
+ ("django","django"):("pypi","django"),("vercel","next.js"):("npm","next"),("vercel","nextjs"):("npm","next"),
+ ("facebook","react"):("npm","react"),("axios","axios"):("npm","axios"),("vitejs","vite"):("npm","vite"),
+ ("nginx","nginx"):("nginx","nginx"),("docker","docker_engine"):("docker","docker_engine"),
+ ("php","php"):("php","php"),("nodejs","node.js"):("nodejs","node.js"),
+ ("ruby-lang","ruby"):("rubygems","ruby"),("python","python"):("python","python"),
+ ("simple-git","simple-git"):("npm","simple-git"),("npmjs","npm"):("npm","npm"),
+}
+def cpe_products(cve):
+    found={}
+    def walk(node):
+        for match in node.get("cpeMatch",[]):
+            if not match.get("vulnerable",True): continue
+            parts=(match.get("criteria") or "").split(":")
+            if len(parts)<6: continue
+            vendor,product,version=parts[3].lower(),parts[4].lower(),parts[5]
+            mapped=CPE_MAP.get((vendor,product))
+            if not mapped: continue
+            clauses=[]
+            if match.get("versionStartIncluding"): clauses.append(">="+match["versionStartIncluding"])
+            if match.get("versionStartExcluding"): clauses.append(">"+match["versionStartExcluding"])
+            if match.get("versionEndIncluding"): clauses.append("<="+match["versionEndIncluding"])
+            if match.get("versionEndExcluding"): clauses.append("<"+match["versionEndExcluding"])
+            if not clauses and version not in {"*","-"}: clauses.append("=="+version)
+            spec=",".join(clauses) or None
+            eco,pkg=mapped
+            found[(eco,pkg,spec)]=(eco,pkg,spec)
+        for child in node.get("nodes",[]): walk(child)
+    for config in cve.get("configurations",[]):
+        walk(config)
+    return list(found.values())
+
 def nvd_fetch():
     now=datetime.now(timezone.utc); start=(now-timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     params={"lastModStartDate":start,"lastModEndDate":now.strftime("%Y-%m-%dT%H:%M:%S.000Z"),"resultsPerPage":2000}
@@ -38,10 +70,16 @@ def nvd_fetch():
         desc=next((x.get("value","") for x in v.get("descriptions",[]) if x.get("lang")=="en"),"")
         refs=[x.get("url") for x in v.get("references",[]) if x.get("url")]
         cve=v.get("id")
-        out.append({"id":"nvd:"+str(cve),"source":"nvd","source_id":cve,"cve":cve,
-          "published_at":iso(v.get("published")),"modified_at":iso(v.get("lastModified")),
-          "severity":severity_from_cvss(score),"title":(desc[:180] or cve),"description":desc,
-          "references":refs,"raw":v})
+        products=cpe_products(v)
+        if not products:
+            products=[(None,None,None)]
+        for ecosystem,package,affected in products:
+            suffix=(":"+str(ecosystem)+":"+str(package)) if package else ""
+            out.append({"id":"nvd:"+str(cve)+suffix,"source":"nvd","source_id":str(cve)+suffix,"cve":cve,
+              "published_at":iso(v.get("published")),"modified_at":iso(v.get("lastModified")),
+              "severity":severity_from_cvss(score),"title":(desc[:180] or cve),"description":desc,
+              "ecosystem":ecosystem,"package":package,"affected_versions":affected,
+              "references":refs,"raw":v})
     return out
 
 def kev_fetch():
