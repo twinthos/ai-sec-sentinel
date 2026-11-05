@@ -4,7 +4,7 @@ This additive service introduces a global incident timeline and client-specific 
 
 ## Start
 
-For a container deployment, copy `.env.guardian.example` to `.env`, replace the API key with a random secret, then run:
+For a container deployment, copy `guardian-deployment-config.example` to `.env`, replace the API key with a random secret, then run:
 
 ```sh
 docker compose --env-file .env -f docker-compose.guardian.yml up --build -d
