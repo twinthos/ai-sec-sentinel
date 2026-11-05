@@ -50,7 +50,9 @@ Do not expose the API directly to the public internet without TLS termination, r
 - `GET /v1/clients/{id}/findings` matched incidents and urgency
 - `PATCH /v1/findings/{id}` remediation status, owner and due date
 - `GET /v1/clients/{id}/dashboard` client overview
+- `GET /v1/clients/{id}/monthly-report?month=YYYY-MM` matched incident trends and recommendations
 - `GET /v1/clients/{id}/export.json|csv|pdf` reporting
+- `POST /v1/clients/{id}/alerts/retry` retry failed client alert deliveries
 
 All endpoints except `/health` require `X-API-Key`.
 
@@ -73,7 +75,7 @@ The source runner supports an hourly loop and triggers client matching after eac
 - Ollama summaries require a local Ollama service and OLLAMA_MODEL (default qwen2.5:3b). For Compose, OLLAMA_HOST defaults to host.docker.internal:11434 via the host-gateway mapping; the API only permits loopback or that explicit local gateway host. Generated text is labelled and original advisory fields remain authoritative.
 - No automated remediation or package changes are performed.
 - No active port scanning, exploit testing, credential collection or intrusive website probing is included.
-- The API does not claim that website fingerprinting is reliable. Add passive URL/repository inventory only with client authorisation, DNS/IP egress controls, redirect validation and evidence confidence labels.
+- Website fingerprinting is heuristic and can be hidden or spoofed. WHOIS, full DNS/CT enrichment and active service discovery are not included; keep the explicit authorisation gate and public-IP/redirect checks enabled.
 - PDF is a basic findings report, not a compliance certificate.
-- Website fingerprinting (headers, robots.txt, sitemap, DNS, WHOIS and SSL), per-customer Slack destinations, role-based client login, monthly trend narrative and fully isolated tenant credentials are not implemented. The console is an operator console authenticated with the deployment key, not a customer self-service portal.
+- Per-customer Slack destinations, role-based client login and fully isolated tenant credentials are not implemented. The monthly report API provides matched-incident counts, severity breakdown, month-on-month change and recommendations; it is not an independently assured compliance report. The console is an operator console authenticated with the deployment key, not a customer self-service portal.
 - Keep original advisories as source of truth; AI summaries must be labelled generated and never alter severity, affected ranges or fix versions.
