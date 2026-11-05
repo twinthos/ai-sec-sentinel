@@ -77,6 +77,9 @@ def init_db():
           findings_created INTEGER DEFAULT 0, status TEXT NOT NULL, error TEXT);
         CREATE TABLE IF NOT EXISTS source_state(
           source TEXT PRIMARY KEY, last_success TEXT, cursor TEXT, error TEXT);
+        CREATE TABLE IF NOT EXISTS site_scans(
+          id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+          url TEXT NOT NULL, scanned_at TEXT NOT NULL, result_json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS alert_deliveries(
           id INTEGER PRIMARY KEY AUTOINCREMENT, finding_id INTEGER NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
           channel TEXT NOT NULL, status TEXT NOT NULL, attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -255,6 +258,10 @@ def timeline_density(client_id: Optional[str]=None, bucket: str="month"):
 class GitHubScanIn(BaseModel):
     repository_url: str = Field(min_length=15, max_length=500)
 
+class WebsiteScanIn(BaseModel):
+    url: str = Field(min_length=8, max_length=2000)
+    authorised: bool = False
+
 @app.post("/v1/clients/{client_id}/scan-github", dependencies=[Depends(require_key)], status_code=202)
 def scan_github_repository(client_id: str, body: GitHubScanIn):
     from guardian_stack import inspect_github_repo
@@ -274,6 +281,36 @@ def scan_github_repository(client_id: str, body: GitHubScanIn):
     result["components_added"]=added
     result["client_id"]=client_id
     return result
+
+@app.post("/v1/clients/{client_id}/scan-website", dependencies=[Depends(require_key)], status_code=202)
+def scan_website(client_id: str, body: WebsiteScanIn):
+    if not body.authorised:
+        raise HTTPException(400,"Confirm that you own or are authorised to assess this website")
+    from guardian_website import detect
+    with db() as c:
+        if not c.execute("SELECT 1 FROM clients WHERE id=?",(client_id,)).fetchone():
+            raise HTTPException(404,"Client not found")
+    result=detect(body.url)
+    added=0
+    with db() as c:
+        for item in result["components"]:
+            try:
+                c.execute("""INSERT INTO components(client_id,ecosystem,package,version,source,criticality,created_at)
+                  VALUES(?,?,?,?,?,?,?)""",(client_id,item["ecosystem"],item["package"],item["version"],"website_fingerprint:"+item["evidence"],"normal",utcnow()))
+                added+=1
+            except sqlite3.IntegrityError:
+                pass
+        c.execute("INSERT INTO site_scans(client_id,url,scanned_at,result_json) VALUES(?,?,?,?)",
+          (client_id,result["url"],utcnow(),json.dumps(result)))
+    result["components_added"]=added
+    result["client_id"]=client_id
+    return result
+
+@app.get("/v1/clients/{client_id}/website-scans", dependencies=[Depends(require_key)])
+def website_scan_history(client_id: str):
+    with db() as c:
+        if not c.execute("SELECT 1 FROM clients WHERE id=?",(client_id,)).fetchone(): raise HTTPException(404,"Client not found")
+        return [dict(r) for r in c.execute("SELECT id,url,scanned_at FROM site_scans WHERE client_id=? ORDER BY id DESC LIMIT 20",(client_id,))]
 
 @app.post("/v1/clients/{client_id}/scan", dependencies=[Depends(require_key)], status_code=202)
 def scan_client(client_id: str):
