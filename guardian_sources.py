@@ -151,7 +151,7 @@ PACKAGE_KEYWORDS={
  "react":("npm","react"),"vite":("npm","vite"),"axios":("npm","axios"),
  "simple-git":("npm","simple-git"),"node.js":("nodejs","node.js"),
  "nginx":("nginx","nginx"),"docker":("docker","docker_engine"),
- "wordpress":("wordpress","wordpress"),"php":("php","php"),"spring security":("maven","spring-security"),
+ "wordpress":("wordpress","wordpress"),"php":("php","php"),"spring security":("maven","org.springframework.security:spring-security-core"),
 }
 def rss_fetch(feed_name,url):
     import feedparser
