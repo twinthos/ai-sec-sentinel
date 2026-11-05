@@ -165,6 +165,12 @@ def run_all():
                 results.append({"client_id":client_id,"scan_ok":False,"error":str(exc)[:200]})
     except Exception as exc:
         results.append({"scan_ok":False,"error":str(exc)[:200]})
+    try:
+        from guardian_delivery import retry_pending
+        retried=retry_pending()
+        if retried: results.append({"alert_retries":retried})
+    except Exception as exc:
+        results.append({"alert_retry_ok":False,"error":str(exc)[:200]})
     return results
 
 if __name__=="__main__":
