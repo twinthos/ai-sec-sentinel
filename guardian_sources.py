@@ -5,7 +5,7 @@ recorded and never interpreted as 'no vulnerabilities'. Run with:
 python guardian_sources.py --once
 """
 from __future__ import annotations
-import argparse, json, os, re, time
+import argparse, hashlib, json, os, re, time
 from datetime import datetime, timedelta, timezone
 import requests
 from guardian_platform import db, upsert_incident, utcnow
@@ -137,7 +137,61 @@ def github_fetch():
         time.sleep(0.2)
     return out
 
+RSS_FEEDS={
+ "cisa_advisories":"https://www.cisa.gov/cybersecurity-advisories/all.xml",
+ "uk_ncsc":"https://www.ncsc.gov.uk/api/1/services/v1/all-rss-feed.xml",
+ "the_hacker_news":"https://thehackernews.com/feeds/posts/default?alt=rss",
+ "bleepingcomputer":"https://www.bleepingcomputer.com/feed/",
+ "securityweek":"https://www.securityweek.com/feed/",
+ "krebs_on_security":"https://krebsonsecurity.com/feed/",
+ "django_weblog":"https://www.djangoproject.com/rss/weblog/",
+}
+PACKAGE_KEYWORDS={
+ "django":("pypi","django"),"next.js":("npm","next"),"nextjs":("npm","next"),
+ "react":("npm","react"),"vite":("npm","vite"),"axios":("npm","axios"),
+ "simple-git":("npm","simple-git"),"node.js":("nodejs","node.js"),
+ "nginx":("nginx","nginx"),"docker":("docker","docker_engine"),
+ "wordpress":("wordpress","wordpress"),"php":("php","php"),"spring security":("maven","spring-security"),
+}
+def rss_fetch(feed_name,url):
+    import feedparser
+    response=requests.get(url,headers=HEADERS,timeout=TIMEOUT)
+    response.raise_for_status()
+    feed=feedparser.parse(response.content)
+    if getattr(feed,"bozo",False) and not feed.entries:
+        raise ValueError("Feed parse failed: "+str(getattr(feed,"bozo_exception","unknown"))[:160])
+    out=[]
+    for entry in feed.entries[:100]:
+        title=str(entry.get("title") or "Security feed item")[:240]
+        summary=str(entry.get("summary") or entry.get("description") or "")[:8000]
+        combined=(title+" "+summary).lower()
+        if not re.search(r"\\b(cve-20\\d{2}-\\d+|vulnerabilit|security advisory|security release|exploit|ransomware|data breach|breach notification|patch release)\\b",combined):
+            continue
+        link=entry.get("link") or url
+        identity=hashlib.sha256(str(link).encode()).hexdigest()[:24]
+        published=entry.get("published_parsed") or entry.get("updated_parsed")
+        published_at=datetime(*published[:6],tzinfo=timezone.utc).isoformat() if published else utcnow()
+        cve_match=re.search(r"CVE-20\\d{2}-\\d+",combined,re.I)
+        severity="unknown"
+        for word in ("critical","high","medium","moderate","low"):
+            if re.search(r"\\b"+word+r"\\b",combined):
+                severity={"moderate":"medium"}.get(word,word); break
+        mapped=None
+        for keyword,target in PACKAGE_KEYWORDS.items():
+            if keyword in combined: mapped=target; break
+        eco,package=mapped if mapped else (None,None)
+        out.append({"id":"rss:"+feed_name+":"+identity,"source":"rss_news","source_id":feed_name+":"+identity,
+          "published_at":published_at,"severity":severity,"ecosystem":eco,"package":package,
+          "cve":cve_match.group(0).upper() if cve_match else None,"title":title,"description":summary,
+          "references":[link],"remediation":None,"raw":{"feed":feed_name,"link":link}})
+    return out
+
+def make_rss_fetcher(name,url):
+    def _fetch(): return rss_fetch(name,url)
+    return _fetch
+
 SOURCES={"nvd":nvd_fetch,"cisa_kev":kev_fetch,"github_advisory":github_fetch}
+SOURCES.update({"rss_"+name:make_rss_fetcher(name,url) for name,url in RSS_FEEDS.items()})
 def run_source(name, fetcher):
     try:
         items=fetcher()
