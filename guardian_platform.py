@@ -46,7 +46,7 @@ def init_db():
         c.executescript("""
         CREATE TABLE IF NOT EXISTS clients(
           id TEXT PRIMARY KEY, name TEXT NOT NULL, region TEXT NOT NULL DEFAULT 'global',
-          created_at TEXT NOT NULL);
+          contact_email TEXT, created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS components(
           id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
           ecosystem TEXT NOT NULL, package TEXT NOT NULL, version TEXT, source TEXT NOT NULL DEFAULT 'manual',
@@ -75,12 +75,21 @@ def init_db():
           findings_created INTEGER DEFAULT 0, status TEXT NOT NULL, error TEXT);
         CREATE TABLE IF NOT EXISTS source_state(
           source TEXT PRIMARY KEY, last_success TEXT, cursor TEXT, error TEXT);
+        CREATE TABLE IF NOT EXISTS alert_deliveries(
+          id INTEGER PRIMARY KEY AUTOINCREMENT, finding_id INTEGER NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+          channel TEXT NOT NULL, status TEXT NOT NULL, attempt_count INTEGER NOT NULL DEFAULT 0,
+          last_attempt TEXT, error TEXT, UNIQUE(finding_id,channel));
         """)
+        # Additive migration for databases created by the earlier preview.
+        client_cols={r["name"] for r in c.execute("PRAGMA table_info(clients)")}
+        if "contact_email" not in client_cols:
+            c.execute("ALTER TABLE clients ADD COLUMN contact_email TEXT")
 init_db()
 
 class ClientIn(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     region: str = Field(default="global", max_length=40)
+    contact_email: Optional[str] = Field(default=None, max_length=254)
 
 class ComponentIn(BaseModel):
     ecosystem: str = Field(min_length=1, max_length=60)
@@ -135,7 +144,10 @@ def health():
 def create_client(body: ClientIn):
     cid = secrets.token_hex(12)
     with db() as c:
-        c.execute("INSERT INTO clients(id,name,region,created_at) VALUES(?,?,?,?)",(cid,body.name,body.region,utcnow()))
+        
+        if body.contact_email and ("@" not in body.contact_email or body.contact_email.startswith("@") or body.contact_email.endswith("@")):
+            raise HTTPException(422,"Invalid contact email")
+        c.execute("INSERT INTO clients(id,name,region,contact_email,created_at) VALUES(?,?,?,?,?)",(cid,body.name,body.region,body.contact_email,utcnow()))
     return {"id":cid, **body.model_dump()}
 
 @app.get("/v1/clients", dependencies=[Depends(require_key)])
@@ -254,6 +266,7 @@ def scan_client(client_id: str):
         components=[dict(r) for r in c.execute("SELECT * FROM components WHERE client_id=?",(client_id,))]
         incidents=[dict(r) for r in c.execute("SELECT * FROM incidents")]
         created=0
+        new_finding_ids=[]
         for inc in incidents:
             # Never fan out an unmapped CVE/KEV record to every customer asset.
             # CPE/package enrichment is required before it can be matched safely.
@@ -268,10 +281,19 @@ def scan_client(client_id: str):
                 cur=c.execute("""INSERT OR IGNORE INTO findings(client_id,incident_id,component_id,match_state,first_seen,last_seen)
                   VALUES(?,?,?,?,?,?)""",(client_id,inc["id"],comp["id"],state,started,started))
                 created+=cur.rowcount
+                if cur.rowcount:
+                    new_finding_ids.append(c.execute("SELECT last_insert_rowid()").fetchone()[0])
                 c.execute("UPDATE findings SET last_seen=? WHERE client_id=? AND incident_id=? AND component_id=?",(started,client_id,inc["id"],comp["id"]))
         cur=c.execute("INSERT INTO scans(client_id,started_at,completed_at,incidents_checked,findings_created,status) VALUES(?,?,?,?,?,?)",
           (client_id,started,utcnow(),len(incidents),created,"completed"))
-        return {"scan_id":cur.lastrowid,"client_id":client_id,"incidents_checked":len(incidents),"new_findings":created,"completed_at":utcnow()}
+        result={"scan_id":cur.lastrowid,"client_id":client_id,"incidents_checked":len(incidents),"new_findings":created,"completed_at":utcnow()}
+    deliveries=[]
+    if new_finding_ids:
+        from guardian_delivery import deliver_finding
+        for finding_id in new_finding_ids:
+            deliveries.append({"finding_id":finding_id,"results":deliver_finding(finding_id)})
+    result["alert_deliveries"]=deliveries
+    return result
 
 @app.get("/v1/clients/{client_id}/findings", dependencies=[Depends(require_key)])
 def findings(client_id: str, status: Optional[str]=None):
@@ -370,6 +392,13 @@ def export_pdf(client_id: str):
         if y<55: p.showPage(); y=height-48; p.setFont("Helvetica",9)
     p.save(); buf.seek(0)
     return StreamingResponse(buf,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="sentinel-{client_id}-report.pdf"'})
+
+@app.post("/v1/clients/{client_id}/alerts/retry", dependencies=[Depends(require_key)])
+def retry_client_alerts(client_id: str):
+    with db() as c:
+        if not c.execute("SELECT 1 FROM clients WHERE id=?",(client_id,)).fetchone(): raise HTTPException(404,"Client not found")
+    from guardian_delivery import retry_pending
+    return retry_pending(client_id)
 
 @app.get("/v1/clients/{client_id}/scans", dependencies=[Depends(require_key)])
 def scan_history(client_id: str):
