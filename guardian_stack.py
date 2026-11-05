@@ -73,6 +73,13 @@ def extract_manifests(tree, get_file):
                         add("npm",name,meta.get("version"),"package-lock.json")
                         walk(meta.get("dependencies"))
                 walk(lock.get("dependencies"))
+    if "Pipfile.lock" in paths:
+        data=get_file("Pipfile.lock")
+        if isinstance(data,dict):
+            for section in ("default","develop"):
+                for name,meta in (data.get(section) or {}).items():
+                    raw=(meta or {}).get("version")
+                    add("pypi",name,raw,"Pipfile.lock")
     if "requirements.txt" in paths:
         for line in get_file("requirements.txt").splitlines():
             line=line.strip()
@@ -121,6 +128,41 @@ def extract_manifests(tree, get_file):
                 if package.get("source"):
                     add("cargo",package.get("name",""),package.get("version"),"Cargo.lock")
         except Exception: pass
+    if "pom.xml" in paths:
+        import xml.etree.ElementTree as ET
+        try:
+            root=ET.fromstring(get_file("pom.xml"))
+            ns={"m":"http://maven.apache.org/POM/4.0.0"}
+            for dep in root.findall(".//m:dependencies/m:dependency",ns):
+                group=dep.findtext("m:groupId",default="",namespaces=ns)
+                artifact=dep.findtext("m:artifactId",default="",namespaces=ns)
+                version=dep.findtext("m:version",default="",namespaces=ns)
+                if group and artifact: add("maven",group+":"+artifact,version,"pom.xml")
+        except Exception: pass
+    for gradle_file in ("build.gradle","build.gradle.kts"):
+        if gradle_file in paths:
+            for line in get_file(gradle_file).splitlines():
+                match=re.search(r"['\\\"]([A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+):([A-Za-z0-9_.+-]+)['\\\"]",line)
+                if match: add("maven",match.group(1)+":"+match.group(2),match.group(3),gradle_file)
+    if "Gemfile.lock" in paths:
+        section=False
+        for line in get_file("Gemfile.lock").splitlines():
+            if line.strip()=="specs:": section=True; continue
+            if line and not line.startswith(" "): section=False
+            if section:
+                match=re.match(r"\\s{4}([A-Za-z0-9_.-]+) \\(([^)]+)\\)",line)
+                if match: add("rubygems",match.group(1),match.group(2),"Gemfile.lock")
+    if "Dockerfile" in paths:
+        for line in get_file("Dockerfile").splitlines():
+            match=re.match(r"\\s*FROM\\s+(?:--platform=\\S+\\s+)?([^\\s]+)",line,re.I)
+            if not match: continue
+            image=match.group(1)
+            if image.lower()=="scratch" or image.startswith("$"): continue
+            image=image.split("@",1)[0]
+            name,sep,tag=image.rpartition(":")
+            if not sep or "/" in tag: name,tag=image,None
+            package=name.split("/")[-1].lower()
+            if package: add("docker",package,tag if tag and not tag.startswith("$") else None,"Dockerfile FROM")
     if "go.mod" in paths:
         for line in get_file("go.mod").splitlines():
             m=re.match(r"\s*([^\s]+)\s+(v\d+\.\d+\.\d+(?:[-+][^\s]+)?)",line)
@@ -146,7 +188,7 @@ def inspect_github_repo(url):
     else: archived=False
     branch=meta.get("default_branch") or "main"
     tree=request_json(f"{API}/repos/{owner}/{repo}/git/trees/{branch}?recursive=1").get("tree",[])
-    wanted={"package.json","package-lock.json","requirements.txt","pyproject.toml","poetry.lock","composer.json","composer.lock","go.mod","Cargo.toml","Cargo.lock"}
+    wanted={"package.json","package-lock.json","requirements.txt","Pipfile.lock","pyproject.toml","poetry.lock","composer.json","composer.lock","go.mod","Cargo.toml","Cargo.lock","pom.xml","build.gradle","build.gradle.kts","Gemfile.lock","Dockerfile"}
     paths={x["path"] for x in tree if x.get("type")=="blob"}
     # Only read known root manifests. No arbitrary paths or file execution.
     def get_file(name):
