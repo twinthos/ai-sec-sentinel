@@ -36,6 +36,13 @@ services:
     environment:
       SENTINEL_GUARDIAN_DB: /data/guardian_platform.sqlite3
       NVD_API_KEY: ${NVD_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      SENTINEL_SMTP_HOST: ${SENTINEL_SMTP_HOST:-}
+      SENTINEL_SMTP_PORT: ${SENTINEL_SMTP_PORT:-587}
+      SENTINEL_SMTP_FROM: ${SENTINEL_SMTP_FROM:-}
+      SENTINEL_SMTP_USER: ${SENTINEL_SMTP_USER:-}
+      SENTINEL_SMTP_PASSWORD: ${SENTINEL_SMTP_PASSWORD:-}
+      SENTINEL_SLACK_WEBHOOK_URL: ${SENTINEL_SLACK_WEBHOOK_URL:-}
     volumes:
       - guardian-data:/data
     depends_on:
