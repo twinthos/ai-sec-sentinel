@@ -272,7 +272,7 @@ def scan_client(client_id: str):
         for comp in components:
             # Query only advisories for this exact package/ecosystem; do not
             # load the entire global feed into memory for every tenant scan.
-            matches=[dict(r) for r in c.execute("SELECT * FROM incidents WHERE lower(package)=? AND lower(ecosystem)=?",(comp["package"].lower(),comp["ecosystem"].lower()))]
+            matches=[dict(r) for r in c.execute("SELECT * FROM incidents WHERE package=? AND ecosystem=?",(comp["package"].lower(),comp["ecosystem"].lower()))]
             incidents_checked+=len(matches)
             for inc in matches:
                 state=version_matches(comp["version"],inc["affected_versions"])
