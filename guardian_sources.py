@@ -165,16 +165,16 @@ def rss_fetch(feed_name,url):
         title=str(entry.get("title") or "Security feed item")[:240]
         summary=str(entry.get("summary") or entry.get("description") or "")[:8000]
         combined=(title+" "+summary).lower()
-        if not re.search(r"\\b(cve-20\\d{2}-\\d+|vulnerabilit|security advisory|security release|exploit|ransomware|data breach|breach notification|patch release)\\b",combined):
+        if not re.search(r"\b(cve-20\d{2}-\d+|vulnerabilit|security advisory|security release|exploit|ransomware|data breach|breach notification|patch release)\b",combined):
             continue
         link=entry.get("link") or url
         identity=hashlib.sha256(str(link).encode()).hexdigest()[:24]
         published=entry.get("published_parsed") or entry.get("updated_parsed")
         published_at=datetime(*published[:6],tzinfo=timezone.utc).isoformat() if published else utcnow()
-        cve_match=re.search(r"CVE-20\\d{2}-\\d+",combined,re.I)
+        cve_match=re.search(r"CVE-20\d{2}-\d+",combined,re.I)
         severity="unknown"
         for word in ("critical","high","medium","moderate","low"):
-            if re.search(r"\\b"+word+r"\\b",combined):
+            if re.search(r"\b"+word+r"\b",combined):
                 severity={"moderate":"medium"}.get(word,word); break
         mapped=None
         for keyword,target in PACKAGE_KEYWORDS.items():
