@@ -58,6 +58,21 @@ def extract_manifests(tree, get_file):
         if isinstance(data,dict):
             for section in ("dependencies","devDependencies","optionalDependencies","peerDependencies"):
                 for name,ver in (data.get(section) or {}).items(): add("npm",name,ver,"package.json:"+section)
+    if "package-lock.json" in paths:
+        lock=get_file("package-lock.json")
+        if isinstance(lock,dict):
+            packages=lock.get("packages") or {}
+            if packages:
+                for path,meta in packages.items():
+                    if not path or not path.startswith("node_modules/"): continue
+                    name=path.split("node_modules/")[-1]
+                    if name: add("npm",name,meta.get("version"),"package-lock.json")
+            else:
+                def walk(deps):
+                    for name,meta in (deps or {}).items():
+                        add("npm",name,meta.get("version"),"package-lock.json")
+                        walk(meta.get("dependencies"))
+                walk(lock.get("dependencies"))
     if "requirements.txt" in paths:
         for line in get_file("requirements.txt").splitlines():
             line=line.strip()
@@ -86,6 +101,26 @@ def extract_manifests(tree, get_file):
             for section in ("require","require-dev"):
                 for name,ver in (data.get(section) or {}).items():
                     if name!="php": add("composer",name,ver,"composer.json:"+section)
+    if "composer.lock" in paths:
+        data=get_file("composer.lock")
+        if isinstance(data,dict):
+            for package in data.get("packages",[])+data.get("packages-dev",[]):
+                add("composer",package.get("name",""),package.get("version"),"composer.lock")
+    if "poetry.lock" in paths:
+        import tomllib
+        try:
+            data=tomllib.loads(get_file("poetry.lock"))
+            for package in data.get("package",[]):
+                add("pypi",package.get("name",""),package.get("version"),"poetry.lock")
+        except Exception: pass
+    if "Cargo.lock" in paths:
+        import tomllib
+        try:
+            data=tomllib.loads(get_file("Cargo.lock"))
+            for package in data.get("package",[]):
+                if package.get("source"):
+                    add("cargo",package.get("name",""),package.get("version"),"Cargo.lock")
+        except Exception: pass
     if "go.mod" in paths:
         for line in get_file("go.mod").splitlines():
             m=re.match(r"\s*([^\s]+)\s+(v\d+\.\d+\.\d+(?:[-+][^\s]+)?)",line)
@@ -111,7 +146,7 @@ def inspect_github_repo(url):
     else: archived=False
     branch=meta.get("default_branch") or "main"
     tree=request_json(f"{API}/repos/{owner}/{repo}/git/trees/{branch}?recursive=1").get("tree",[])
-    wanted={"package.json","requirements.txt","pyproject.toml","composer.json","go.mod","Cargo.toml"}
+    wanted={"package.json","package-lock.json","requirements.txt","pyproject.toml","poetry.lock","composer.json","composer.lock","go.mod","Cargo.toml","Cargo.lock"}
     paths={x["path"] for x in tree if x.get("type")=="blob"}
     # Only read known root manifests. No arbitrary paths or file execution.
     def get_file(name):
