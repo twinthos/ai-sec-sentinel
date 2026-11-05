@@ -68,8 +68,8 @@ def github_fetch():
             fix=vref.get("first_patched_version") or {}
             ecosystem=pkg.get("ecosystem"); name=pkg.get("name")
             out.append({"id":"github:"+str(ghsa)+":"+str(ecosystem)+":"+str(name),"source":"github_advisory",
-              "source_id":ghsa,"cve":cve,"published_at":iso(v.get("published_at")),
-              "modified_at":iso(v.get("updated_at")),"severity":(v.get("severity") or "unknown").lower(),
+              "source_id":str(ghsa)+":"+str(ecosystem)+":"+str(name),"cve":cve,"published_at":iso(v.get("published_at")),
+              "modified_at":iso(v.get("updated_at")),"severity":{"moderate":"medium"}.get((v.get("severity") or "unknown").lower(),(v.get("severity") or "unknown").lower()),
               "ecosystem":str(ecosystem or "").lower(),"package":str(name or "").lower(),
               "title":v.get("summary") or ghsa,"description":v.get("description") or "",
               "affected_versions":rng,"fixed_version":fix.get("identifier"),
