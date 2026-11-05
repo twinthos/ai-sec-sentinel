@@ -82,14 +82,26 @@ def nvd_fetch():
         time.sleep(0.7 if key else 6)
     return out
 
+KEV_MAP={
+ ("django","django"):("pypi","django"),("vercel","next.js"):("npm","next"),
+ ("facebook","react"):("npm","react"),("axios","axios"):("npm","axios"),
+ ("vite","vite"):("npm","vite"),("nginx","nginx"):("nginx","nginx"),
+ ("docker","docker engine"):("docker","docker_engine"),("node.js","node.js"):("nodejs","node.js"),
+ ("php","php"):("php","php"),("ruby","ruby"):("rubygems","ruby"),
+ ("apache","http server"):("apache","http_server"),
+}
 def kev_fetch():
     r=requests.get("https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",headers=HEADERS,timeout=TIMEOUT)
     r.raise_for_status(); out=[]
     for v in r.json().get("vulnerabilities",[]):
         cve=v.get("cveID")
-        out.append({"id":"cisa-kev:"+str(cve),"source":"cisa_kev","source_id":cve,"cve":cve,
+        vendor=(v.get("vendorProject") or "").strip().lower(); product=(v.get("product") or "").strip().lower()
+        mapped=KEV_MAP.get((vendor,product))
+        ecosystem,package=mapped if mapped else (None,None)
+        suffix=(":"+str(ecosystem)+":"+str(package)) if package else ""
+        out.append({"id":"cisa-kev:"+str(cve)+suffix,"source":"cisa_kev","source_id":str(cve)+suffix,"cve":cve,
           "published_at":iso(v.get("dateAdded")),"severity":"critical","title":v.get("vulnerabilityName") or cve,
-          "description":v.get("shortDescription") or "", "affected_versions":None,
+          "description":v.get("shortDescription") or "", "ecosystem":ecosystem,"package":package,"affected_versions":None,
           "remediation":v.get("requiredAction") or "Apply the vendor remediation; prioritise because exploitation is confirmed.",
           "references":[v.get("notes")] if v.get("notes") else [],"exploited":True,"raw":v})
     return out
