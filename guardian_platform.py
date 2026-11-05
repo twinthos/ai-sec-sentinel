@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field, HttpUrl
 from packaging.version import Version, InvalidVersion
 from packaging.specifiers import SpecifierSet, InvalidSpecifier
-from pathlib import Path
+from pathlib import Path\nfrom urllib.parse import urlparse
 
 DB_PATH = os.getenv("SENTINEL_GUARDIAN_DB", os.path.join(os.getenv("SENTINEL_DATA_DIR", "./data"), "guardian_platform.sqlite3"))
 API_KEY = os.getenv("SENTINEL_PLATFORM_API_KEY", "")
@@ -323,8 +323,9 @@ def summarize_incident(incident_id: str):
             row=c.execute("SELECT id,cve,title,description,severity,package,ecosystem,affected_versions,fixed_version,remediation,references_json FROM incidents WHERE id=?",(incident_id,)).fetchone()
         if not row: raise HTTPException(404,"Incident not found")
         host=os.getenv("OLLAMA_HOST","http://127.0.0.1:11434").rstrip("/")
-        if not host.startswith(("http://127.0.0.1","http://localhost","http://[::1]")):
-            raise HTTPException(503,"OLLAMA_HOST must point to a local Ollama service")
+        parsed_host=urlparse(host)
+        if parsed_host.scheme!="http" or parsed_host.hostname not in {"127.0.0.1","localhost","::1"} or parsed_host.port not in {None,11434}:
+            raise HTTPException(503,"OLLAMA_HOST must point to local Ollama on port 11434")
         model=os.getenv("OLLAMA_MODEL","qwen2.5:3b")
         source=dict(row); source["references"]=json.loads(source.pop("references_json"))
         prompt=("Summarise this security advisory for a technical business owner in plain English. "
