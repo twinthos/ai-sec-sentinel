@@ -295,7 +295,7 @@ def scan_client(client_id: str):
                     c.execute("UPDATE findings SET match_state='not_affected',status='resolved',resolved_at=coalesce(resolved_at,?),last_seen=? WHERE client_id=? AND incident_id=? AND component_id=?",
                       (started,started,client_id,inc["id"],comp["id"]))
                     continue
-                if state=="unknown" and inc["affected_versions"]: state="potential"
+                if state=="unknown": state="potential"
                 cur=c.execute("""INSERT OR IGNORE INTO findings(client_id,incident_id,component_id,match_state,first_seen,last_seen)
                   VALUES(?,?,?,?,?,?)""",(client_id,inc["id"],comp["id"],state,started,started))
                 created+=cur.rowcount
