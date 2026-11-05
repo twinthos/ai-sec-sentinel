@@ -1,0 +1,58 @@
+# Sentinel Guardian Platform — implementation and operating boundaries
+
+This additive service introduces a global incident timeline and client-specific vulnerability matching. It is separate from the existing AI-agent execution Guardian in `guardian_gate.py`; the two systems must not be conflated.
+
+## Start
+
+Install the additional API/report dependencies:
+
+```sh
+python -m pip install -r requirements-guardian.txt
+export SENTINEL_PLATFORM_API_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+export SENTINEL_GUARDIAN_DB=/data/guardian_platform.sqlite3
+uvicorn guardian_platform:app --host 127.0.0.1 --port 8099
+```
+
+Run source ingestion separately:
+
+```sh
+python guardian_sources.py --once
+python guardian_sources.py --interval 60
+```
+
+Do not expose the API directly to the public internet without TLS termination, rate limiting, secret management, backups and a hardened deployment boundary. The default API binds to loopback in the example. Set a unique API key per deployment; rotate it if exposed.
+
+## API
+
+- `POST /v1/clients` create client
+- `POST /v1/clients/{id}/components` add a component and exact version
+- `POST /v1/incidents` ingest a normalized incident
+- `GET /v1/incidents` global/filterable chronological feed
+- `GET /v1/incidents/timeline-density` density buckets for charting
+- `POST /v1/clients/{id}/scan` match known incidents against client inventory
+- `GET /v1/clients/{id}/findings` matched incidents and urgency
+- `PATCH /v1/findings/{id}` remediation status, owner and due date
+- `GET /v1/clients/{id}/dashboard` client overview
+- `GET /v1/clients/{id}/export.json|csv|pdf` reporting
+
+All endpoints except `/health` require `X-API-Key`.
+
+## Data quality and matching
+
+A match is confirmed only when the advisory provides a valid affected-version specifier and the inventory has a parseable version within it. Missing version data is shown as potential exposure. A missing affected-version range cannot be promoted to a confirmed match. Package and ecosystem identifiers must be normalised by source adapters; name-only framework detection is not proof of exposure.
+
+The current source adapters ingest NVD CVEs, CISA KEV and GitHub Security Advisories. CISA KEV is exploitation evidence and elevates urgency; it does not provide a complete package/version range. The source adapters preserve source references and raw records for later parser improvements. Feed pagination, historical backfill, source-specific ecosystem mapping and vendor-blog parsers remain follow-on work.
+
+## Scheduled guardians
+
+The source runner supports an hourly loop; client matching is currently an explicit API scan. A production deployment should schedule per-client scans after successful feed ingestion, record missed/late scans, apply tenant-level quotas and retry with backoff. The stated one-hour detection target is an SLO to validate with publication-to-ingestion telemetry, not a guarantee at this stage.
+
+## Security and privacy boundaries
+
+- Client API key is a single deployment-level shared credential in this first slice, not full multi-tenant identity. Use behind a trusted gateway until per-client principals, key rotation and role-based access are implemented.
+- No automated remediation or package changes are performed.
+- No active port scanning, exploit testing, credential collection or intrusive website probing is included.
+- The API does not claim that website fingerprinting is reliable. Add passive URL/repository inventory only with client authorisation, DNS/IP egress controls, redirect validation and evidence confidence labels.
+- PDF is a basic findings report, not a compliance certificate.
+- Ollama summarisation, Slack/email delivery, full MCP stdio tools, stack fingerprinting, monthly trend narrative and authenticated client UI are not implemented in this slice.
+- Keep original advisories as source of truth; AI summaries must be labelled generated and never alter severity, affected ranges or fix versions.
