@@ -100,6 +100,10 @@ class ComponentIn(BaseModel):
     source: str = Field(default="manual", max_length=40)
     criticality: str = Field(default="normal", pattern="^(low|normal|high|critical)$")
 
+class ComponentUpdate(BaseModel):
+    version: Optional[str] = Field(default=None, max_length=100)
+    criticality: Optional[str] = Field(default=None, pattern="^(low|normal|high|critical)$")
+
 class IncidentIn(BaseModel):
     id: str
     source: str
@@ -173,6 +177,17 @@ def list_components(client_id: str):
     with db() as c:
         if not c.execute("SELECT 1 FROM clients WHERE id=?",(client_id,)).fetchone(): raise HTTPException(404,"Client not found")
         return [dict(r) for r in c.execute("SELECT * FROM components WHERE client_id=? ORDER BY ecosystem,package",(client_id,))]
+
+@app.patch("/v1/clients/{client_id}/components/{component_id}", dependencies=[Depends(require_key)])
+def update_component(client_id: str, component_id: int, body: ComponentUpdate):
+    updates=body.model_dump(exclude_unset=True)
+    if not updates: raise HTTPException(422,"Provide version or criticality")
+    with db() as c:
+        row=c.execute("SELECT id FROM components WHERE id=? AND client_id=?",(component_id,client_id)).fetchone()
+        if not row: raise HTTPException(404,"Component not found")
+        c.execute("UPDATE components SET "+",".join(k+"=?" for k in updates)+" WHERE id=? AND client_id=?",
+          (*updates.values(),component_id,client_id))
+    return {"id":component_id,"client_id":client_id,**updates}
 
 def version_matches(version: Optional[str], spec: Optional[str]):
     if not spec: return "unknown"
