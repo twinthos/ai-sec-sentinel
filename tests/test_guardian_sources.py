@@ -1,4 +1,6 @@
-import unittest\nfrom unittest.mock import patch\nfrom types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 from guardian_sources import cpe_products, KEV_MAP, rss_fetch
 
 class CPEMappingTests(unittest.TestCase):
