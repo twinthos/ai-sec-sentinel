@@ -45,7 +45,7 @@ The current source adapters ingest NVD CVEs, CISA KEV and GitHub Security Adviso
 
 ## Scheduled guardians
 
-The source runner supports an hourly loop; client matching is currently an explicit API scan. A production deployment should schedule per-client scans after successful feed ingestion, record missed/late scans, apply tenant-level quotas and retry with backoff. The stated one-hour detection target is an SLO to validate with publication-to-ingestion telemetry, not a guarantee at this stage.
+The source runner supports an hourly loop and triggers client matching after each ingestion cycle. Failed source pulls are recorded separately; however, the current scan is not a publication-time guarantee and the runner does not yet provide per-tenant schedules, missed-run alerting, quota isolation or robust retry/backoff. Validate the one-hour target with publication-to-ingestion telemetry before making an SLA claim. The stated one-hour detection target is an SLO to validate with publication-to-ingestion telemetry, not a guarantee at this stage.
 
 ## Security and privacy boundaries
 
