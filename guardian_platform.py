@@ -329,7 +329,7 @@ def findings(client_id: str, status: Optional[str]=None):
     for r in rows:
         r["references"]=json.loads(r.pop("references_json"))
         r["urgency"]={"critical":"patch today","high":"patch this week","medium":"plan remediation","low":"review in normal cycle"}.get(r["severity"],"triage")
-        r["match_confidence"]="confirmed" if r["match_state"]=="confirmed" else "potential — verify component/version"
+        r["match_confidence"]="confirmed" if r["match_state"]=="confirmed" else "potential — affected range or version unverified"
     return rows
 
 @app.patch("/v1/findings/{finding_id}", dependencies=[Depends(require_key)])
