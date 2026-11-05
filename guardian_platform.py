@@ -182,6 +182,11 @@ def ingest_incident(body: IncidentIn):
     with db() as c: upsert_incident(c,item)
     return {"accepted":True,"id":item["id"]}
 
+@app.get("/v1/sources", dependencies=[Depends(require_key)])
+def source_status():
+    with db() as c:
+        return [dict(r) for r in c.execute("SELECT source,last_success,cursor,error FROM source_state ORDER BY source")]
+
 @app.get("/v1/incidents", dependencies=[Depends(require_key)])
 def timeline(framework: Optional[str]=None, severity: Optional[str]=None, client_id: Optional[str]=None,
              start: Optional[str]=None, end: Optional[str]=None, limit: int=Query(500,ge=1,le=5000), offset: int=Query(0,ge=0)):
@@ -279,7 +284,7 @@ def dashboard(client_id: str):
         last=c.execute("SELECT completed_at FROM scans WHERE client_id=? ORDER BY id DESC LIMIT 1",(client_id,)).fetchone()
         active=c.execute("SELECT count(*) FROM findings WHERE client_id=? AND status IN ('open','in_progress')",(client_id,)).fetchone()[0]
         return {"client":dict(client),"active_threats":active,"resolved_threats":counts.get("resolved",0),
-          "components":total,"version_known_components":known,"stack_coverage_pct":round(known/total*100,1) if total else 0,
+          "components":total,"version_known_components":known,"version_inventory_completeness_pct":round(known/total*100,1) if total else 0,
           "last_scan_at":last["completed_at"] if last else None,"next_scan_interval_minutes":60,"findings_by_status":counts}
 
 @app.get("/v1/clients/{client_id}/export.json", dependencies=[Depends(require_key)])
@@ -301,7 +306,7 @@ def export_pdf(client_id: str):
     buf=io.BytesIO(); p=canvas.Canvas(buf,pagesize=A4); width,height=A4; y=height-48
     p.setFont("Helvetica-Bold",18); p.drawString(42,y,"Twinthos Sentinel — Security report"); y-=28
     p.setFont("Helvetica",10); p.drawString(42,y,f"{data['client']['name']} | Generated {utcnow()}"); y-=22
-    p.drawString(42,y,f"Active: {data['active_threats']}  Resolved: {data['resolved_threats']}  Stack coverage: {data['stack_coverage_pct']}%"); y-=28
+    p.drawString(42,y,f"Active: {data['active_threats']}  Resolved: {data['resolved_threats']}  Stack coverage: {data['version_inventory_completeness_pct']}%"); y-=28
     for row in rows:
         line=f"{row['severity'].upper()} | {row.get('cve') or row['id']} | {row['package'] or 'Unmapped'} | {row['status']} | {row['urgency']}"
         p.drawString(42,y,line[:110]); y-=15
