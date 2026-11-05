@@ -15,6 +15,10 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(self.client.get("/console").status_code,200)
         client=self.client.post("/v1/clients",headers=self.h,json={"name":"Contact Ltd","contact_email":"security@example.com"}).json()
         self.assertEqual(client["contact_email"],"security@example.com")
+    def test_website_scan_requires_explicit_authorisation(self):
+        client=self.client.post("/v1/clients",headers=self.h,json={"name":"Site owner"}).json()
+        response=self.client.post(f"/v1/clients/{client['id']}/scan-website",headers=self.h,json={"url":"https://example.com","authorised":False})
+        self.assertEqual(response.status_code,400)
     def test_api_key_required(self):
         self.assertEqual(self.client.get("/v1/clients").status_code,401)
     def test_confirmed_and_unknown_version_matching(self):
