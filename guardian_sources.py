@@ -28,6 +28,7 @@ CPE_MAP={
  ("php","php"):("php","php"),("nodejs","node.js"):("nodejs","node.js"),
  ("ruby-lang","ruby"):("rubygems","ruby"),("python","python"):("python","python"),
  ("simple-git","simple-git"):("npm","simple-git"),("npmjs","npm"):("npm","npm"),
+ ("wordpress","wordpress"):("wordpress","wordpress"),
 }
 def cpe_products(cve):
     found={}
@@ -88,7 +89,7 @@ KEV_MAP={
  ("vite","vite"):("npm","vite"),("nginx","nginx"):("nginx","nginx"),
  ("docker","docker engine"):("docker","docker_engine"),("node.js","node.js"):("nodejs","node.js"),
  ("php","php"):("php","php"),("ruby","ruby"):("rubygems","ruby"),
- ("apache","http server"):("apache","http_server"),
+ ("apache","http server"):("apache","http_server"),("wordpress","wordpress"):("wordpress","wordpress"),
 }
 def kev_fetch():
     r=requests.get("https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",headers=HEADERS,timeout=TIMEOUT)
