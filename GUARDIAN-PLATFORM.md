@@ -69,7 +69,7 @@ The source runner supports an hourly loop and triggers client matching after eac
 - The browser console keeps the deployment API key in memory only (not localStorage). Do not use the console on an untrusted or shared device.
 - Email alerts require SENTINEL_SMTP_HOST, SENTINEL_SMTP_FROM, SENTINEL_SMTP_PORT and optional SENTINEL_SMTP_USER / SENTINEL_SMTP_PASSWORD. The client's contact_email is stored in SQLite; protect database files and backups.
 - Slack operations alerts require SENTINEL_SLACK_WEBHOOK_URL to be a Slack incoming webhook. This is one configured operations destination, not per-customer Slack routing. Failed deliveries can be retried via the client API.
-- Ollama summaries require a local Ollama service and OLLAMA_MODEL (default qwen2.5:3b). The endpoint is restricted to loopback; generated text is labelled and original advisory fields remain authoritative.
+- Ollama summaries require a local Ollama service and OLLAMA_MODEL (default qwen2.5:3b). For Compose, OLLAMA_HOST defaults to host.docker.internal:11434 via the host-gateway mapping; the API only permits loopback or that explicit local gateway host. Generated text is labelled and original advisory fields remain authoritative.
 - No automated remediation or package changes are performed.
 - No active port scanning, exploit testing, credential collection or intrusive website probing is included.
 - The API does not claim that website fingerprinting is reliable. Add passive URL/repository inventory only with client authorisation, DNS/IP egress controls, redirect validation and evidence confidence labels.
