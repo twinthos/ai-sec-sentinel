@@ -142,7 +142,7 @@ def extract_manifests(tree, get_file):
     for gradle_file in ("build.gradle","build.gradle.kts"):
         if gradle_file in paths:
             for line in get_file(gradle_file).splitlines():
-                match=re.search(r"['\\\"]([A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+):([A-Za-z0-9_.+-]+)['\\\"]",line)
+                match=re.search(r"""['"]([A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+):([A-Za-z0-9_.+-]+)['"]""",line)
                 if match: add("maven",match.group(1)+":"+match.group(2),match.group(3),gradle_file)
     if "Gemfile.lock" in paths:
         section=False
@@ -150,11 +150,11 @@ def extract_manifests(tree, get_file):
             if line.strip()=="specs:": section=True; continue
             if line and not line.startswith(" "): section=False
             if section:
-                match=re.match(r"\\s{4}([A-Za-z0-9_.-]+) \\(([^)]+)\\)",line)
+                match=re.match(r"\s{4}([A-Za-z0-9_.-]+) \(([^)]+)\)",line)
                 if match: add("rubygems",match.group(1),match.group(2),"Gemfile.lock")
     if "Dockerfile" in paths:
         for line in get_file("Dockerfile").splitlines():
-            match=re.match(r"\\s*FROM\\s+(?:--platform=\\S+\\s+)?([^\\s]+)",line,re.I)
+            match=re.match(r"\s*FROM\s+(?:--platform=\S+\s+)?([^\s]+)",line,re.I)
             if not match: continue
             image=match.group(1)
             if image.lower()=="scratch" or image.startswith("$"): continue
