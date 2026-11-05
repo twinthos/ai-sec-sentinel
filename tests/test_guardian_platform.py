@@ -51,6 +51,16 @@ class PlatformTests(unittest.TestCase):
         self.client.post(f"/v1/clients/{cid}/scan",headers=self.h)
         self.assertEqual(self.client.get(f"/v1/clients/{cid}/dashboard",headers=self.h).json()["active_threats"],0)
         self.assertEqual(self.client.get(f"/v1/clients/{cid}/dashboard",headers=self.h).json()["resolved_threats"],1)
+    def test_monthly_report_counts_only_client_matched_incidents(self):
+        client=self.client.post("/v1/clients",headers=self.h,json={"name":"Monthly Ltd"}).json()
+        cid=client["id"]
+        comp=self.client.post(f"/v1/clients/{cid}/components",headers=self.h,json={"ecosystem":"pypi","package":"django","version":"4.2.1"}).json()
+        self.client.post("/v1/incidents",headers=self.h,json={"id":"monthly:django","source":"test","source_id":"monthly:django","published_at":"2026-11-05T00:00:00Z","severity":"critical","ecosystem":"pypi","package":"django","title":"Monthly test","affected_versions":"<4.2.2"})
+        self.client.post(f"/v1/clients/{cid}/scan",headers=self.h)
+        report=self.client.get(f"/v1/clients/{cid}/monthly-report?month=2026-11",headers=self.h).json()
+        self.assertEqual(report["incidents"],1)
+        self.assertEqual(report["by_severity"]["critical"],1)
+        self.assertEqual(report["active_findings"],1)
     def test_unmapped_kev_does_not_match_every_component(self):
         client=self.client.post("/v1/clients",headers=self.h,json={"name":"No false positives"}).json()
         cid=client["id"]
