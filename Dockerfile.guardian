@@ -1,0 +1,11 @@
+FROM python:3.11-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 SENTINEL_GUARDIAN_DB=/data/guardian_platform.sqlite3
+WORKDIR /app
+COPY requirements.txt requirements-guardian.txt ./
+RUN pip install --no-cache-dir -r requirements-guardian.txt && groupadd -r sentinel && useradd -r -g sentinel sentinel
+COPY guardian_platform.py guardian_sources.py guardian_stack.py guardian_delivery.py guardian_backfill.py guardian_mcp.py guardian_website.py guardian_dashboard.html ./
+RUN mkdir -p /data && chown -R sentinel:sentinel /data
+USER sentinel
+VOLUME ["/data"]
+EXPOSE 8099
+CMD ["uvicorn","guardian_platform:app","--host","0.0.0.0","--port","8099"]

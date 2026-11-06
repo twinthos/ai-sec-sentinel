@@ -29,7 +29,7 @@ python3 ai_sec_sentinel.py --quickstart
 
 Running `python3 ai_sec_sentinel.py` without arguments now prints help instead of starting an unconfigured network scan. `--quickstart` cannot be combined with other CLI flags. This proves the included local read-only tool boundary, **not** a production Hermes, Orgo or arbitrary MCP host integration.
 
-[Operational monitoring guide](docs/LIVE-MONITORING.md) · [Task-scoped Context Firewall](docs/TASK-CONTEXT-FIREWALL.md) · [Future roadmap](docs/ROADMAP.md) · [Agent security ecosystem](docs/ECOSYSTEM.md)
+[Guardian incident timeline + client monitoring platform](GUARDIAN-PLATFORM.md) · [Operational monitoring guide](docs/LIVE-MONITORING.md) · [Task-scoped Context Firewall](docs/TASK-CONTEXT-FIREWALL.md) · [Future roadmap](docs/ROADMAP.md) · [Agent security ecosystem](docs/ECOSYSTEM.md)
 
 ## New: task-context precheck (opt-in)
 
