@@ -89,6 +89,9 @@ def init_db():
         client_cols={r["name"] for r in c.execute("PRAGMA table_info(clients)")}
         if "contact_email" not in client_cols:
             c.execute("ALTER TABLE clients ADD COLUMN contact_email TEXT")
+        finding_cols={r["name"] for r in c.execute("PRAGMA table_info(findings)")}
+        if "auto_resolved" not in finding_cols:
+            c.execute("ALTER TABLE findings ADD COLUMN auto_resolved INTEGER NOT NULL DEFAULT 0")
 init_db()
 
 class ClientIn(BaseModel):
@@ -329,7 +332,7 @@ def scan_client(client_id: str):
             for inc in matches:
                 state=version_matches(comp["version"],inc["affected_versions"])
                 if state=="not_affected":
-                    c.execute("UPDATE findings SET match_state='not_affected',status='resolved',resolved_at=coalesce(resolved_at,?),last_seen=? WHERE client_id=? AND incident_id=? AND component_id=?",
+                    c.execute("UPDATE findings SET match_state='not_affected',status='resolved',resolved_at=coalesce(resolved_at,?),last_seen=?,auto_resolved=1 WHERE client_id=? AND incident_id=? AND component_id=?",
                       (started,started,client_id,inc["id"],comp["id"]))
                     continue
                 if state=="unknown": state="potential"
@@ -338,7 +341,12 @@ def scan_client(client_id: str):
                 created+=cur.rowcount
                 if cur.rowcount:
                     new_finding_ids.append(c.execute("SELECT last_insert_rowid()").fetchone()[0])
-                c.execute("UPDATE findings SET last_seen=?,match_state=? WHERE client_id=? AND incident_id=? AND component_id=?",(started,state,client_id,inc["id"],comp["id"]))
+                c.execute("""UPDATE findings SET last_seen=?,match_state=?,
+                  status=CASE WHEN auto_resolved=1 THEN 'open' ELSE status END,
+                  resolved_at=CASE WHEN auto_resolved=1 THEN NULL ELSE resolved_at END,
+                  auto_resolved=0
+                  WHERE client_id=? AND incident_id=? AND component_id=?""",
+                  (started,state,client_id,inc["id"],comp["id"]))
         cur=c.execute("INSERT INTO scans(client_id,started_at,completed_at,incidents_checked,findings_created,status) VALUES(?,?,?,?,?,?)",
           (client_id,started,utcnow(),incidents_checked,created,"completed"))
         result={"scan_id":cur.lastrowid,"client_id":client_id,"incidents_checked":incidents_checked,"new_findings":created,"completed_at":utcnow()}
@@ -365,7 +373,8 @@ def findings(client_id: str, status: Optional[str]=None):
         rows=[dict(r) for r in c.execute(sql,args)]
     for r in rows:
         r["references"]=json.loads(r.pop("references_json"))
-        r["urgency"]={"critical":"patch today","high":"patch this week","medium":"plan remediation","low":"review in normal cycle"}.get(r["severity"],"triage")
+        r["urgency"]=("confirmed exploitation — assess immediately" if r["exploited"] else
+          {"critical":"patch today","high":"patch this week","medium":"plan remediation","low":"review in normal cycle"}.get(r["severity"],"triage"))
         r["match_confidence"]="confirmed" if r["match_state"]=="confirmed" else "potential — affected range or version unverified"
     return rows
 
@@ -373,7 +382,7 @@ def findings(client_id: str, status: Optional[str]=None):
 def update_finding(finding_id: int, body: StatusIn):
     if body.status not in STATUSES: raise HTTPException(422,"Invalid status")
     with db() as c:
-        cur=c.execute("UPDATE findings SET status=?,owner=?,due_at=?,resolved_at=? WHERE id=?",
+        cur=c.execute("UPDATE findings SET status=?,owner=?,due_at=?,resolved_at=?,auto_resolved=0 WHERE id=?",
           (body.status,body.owner,body.due_at,utcnow() if body.status=="resolved" else None,finding_id))
         if not cur.rowcount: raise HTTPException(404,"Finding not found")
     return {"id":finding_id,**body.model_dump()}
