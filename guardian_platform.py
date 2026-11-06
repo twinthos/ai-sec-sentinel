@@ -500,6 +500,16 @@ def retry_client_alerts(client_id: str):
     from guardian_delivery import retry_pending
     return retry_pending(client_id)
 
+@app.get("/v1/clients/{client_id}/alerts", dependencies=[Depends(require_key)])
+def client_alert_history(client_id: str):
+    with db() as c:
+        if not c.execute("SELECT 1 FROM clients WHERE id=?",(client_id,)).fetchone():
+            raise HTTPException(404,"Client not found")
+        return [dict(r) for r in c.execute("""SELECT a.*,i.cve,i.title,i.severity
+          FROM alert_deliveries a JOIN findings f ON f.id=a.finding_id
+          JOIN incidents i ON i.id=f.incident_id
+          WHERE f.client_id=? ORDER BY a.last_attempt DESC LIMIT 200""",(client_id,))]
+
 @app.get("/v1/clients/{client_id}/scans", dependencies=[Depends(require_key)])
 def scan_history(client_id: str):
     with db() as c:
