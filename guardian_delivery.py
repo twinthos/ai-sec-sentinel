@@ -20,7 +20,7 @@ def _record(finding_id,channel,status,error=None):
 def deliver_finding(finding_id):
     with db() as c:
         row=c.execute("""SELECT f.id,c.name,c.contact_email,i.cve,i.title,i.description,i.severity,
-          i.package,i.affected_versions,i.fixed_version,i.remediation,i.references_json
+          i.package,i.affected_versions,i.fixed_version,i.remediation,i.references_json,i.exploited
           FROM findings f JOIN clients c ON c.id=f.client_id JOIN incidents i ON i.id=f.incident_id
           WHERE f.id=?""",(finding_id,)).fetchone()
     if not row: return []
@@ -44,6 +44,8 @@ What happened:
 {item['title']}
 
 {item['description']}
+
+Exploitation status: {'Known exploited (CISA KEV)' if item['exploited'] else 'Not confirmed by this record'}
 
 Recommended action:
 {item['remediation'] or 'Review the original vendor advisory. Do not assume a fix version where none is provided.'}
@@ -77,6 +79,7 @@ This is an automated security notification. Verify applicability against your de
               f"*Component:* {item['package'] or 'Unmapped'}\n"
               f"*Affected versions:* {item['affected_versions'] or 'Not specified'}\n"
               f"*Fix:* {item['fixed_version'] or 'Not specified'}\n"
+              f"*Exploitation:* {'Known exploited (CISA KEV)' if item['exploited'] else 'Not confirmed'}\n"
               f"*Action:* {item['remediation'] or 'Review original vendor advisory.'}")
             response=requests.post(webhook,json={"text":text},timeout=(3,10));response.raise_for_status()
             _record(finding_id,"slack","sent");results.append({"channel":"slack","status":"sent"})
