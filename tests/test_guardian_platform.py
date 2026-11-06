@@ -12,6 +12,12 @@ class PlatformTests(unittest.TestCase):
         self.client=TestClient(gp.app)
         self.h={"X-API-Key":"test-key"}
     def tearDown(self): self.tmp.cleanup()
+    def test_pdf_export_returns_a_valid_pdf_document(self):
+        client=self.client.post("/v1/clients",headers=self.h,json={"name":"PDF Report Ltd"}).json()
+        response=self.client.get(f"/v1/clients/{client['id']}/export.pdf",headers=self.h)
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.headers["content-type"],"application/pdf")
+        self.assertTrue(response.content.startswith(b"%PDF-"))
     def test_console_is_served_and_client_contact_is_saved(self):
         self.assertEqual(self.client.get("/console").status_code,200)
         client=self.client.post("/v1/clients",headers=self.h,json={"name":"Contact Ltd","contact_email":"security@example.com"}).json()
