@@ -101,7 +101,7 @@ def kev_fetch():
         ecosystem,package=mapped if mapped else (None,None)
         suffix=(":"+str(ecosystem)+":"+str(package)) if package else ""
         out.append({"id":"cisa-kev:"+str(cve)+suffix,"source":"cisa_kev","source_id":str(cve)+suffix,"cve":cve,
-          "published_at":iso(v.get("dateAdded")),"severity":"critical","title":v.get("vulnerabilityName") or cve,
+          "published_at":iso(v.get("dateAdded")),"severity":"unknown","title":v.get("vulnerabilityName") or cve,
           "description":v.get("shortDescription") or "", "ecosystem":ecosystem,"package":package,"affected_versions":None,
           "remediation":v.get("requiredAction") or "Apply the vendor remediation; prioritise because exploitation is confirmed.",
           "references":[v.get("notes")] if v.get("notes") else [],"exploited":True,"raw":v})
