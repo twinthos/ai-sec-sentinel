@@ -61,6 +61,29 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(report["incidents"],1)
         self.assertEqual(report["by_severity"]["critical"],1)
         self.assertEqual(report["active_findings"],1)
+    def test_finding_reopens_if_component_becomes_vulnerable_again(self):
+        client=self.client.post("/v1/clients",headers=self.h,json={"name":"Reopen Ltd"}).json()
+        cid=client["id"]
+        component=self.client.post(f"/v1/clients/{cid}/components",headers=self.h,json={"ecosystem":"pypi","package":"django","version":"4.2.1"}).json()
+        self.client.post("/v1/incidents",headers=self.h,json={"id":"reopen:django","source":"test","source_id":"reopen:django","published_at":"2026-11-05T00:00:00Z","severity":"high","ecosystem":"pypi","package":"django","title":"Reopen test","affected_versions":"<4.2.2"})
+        self.client.post(f"/v1/clients/{cid}/scan",headers=self.h)
+        self.client.patch(f"/v1/clients/{cid}/components/{component['id']}",headers=self.h,json={"version":"4.2.2"})
+        self.client.post(f"/v1/clients/{cid}/scan",headers=self.h)
+        self.assertEqual(self.client.get(f"/v1/clients/{cid}/dashboard",headers=self.h).json()["active_threats"],0)
+        self.client.patch(f"/v1/clients/{cid}/components/{component['id']}",headers=self.h,json={"version":"4.2.1"})
+        self.client.post(f"/v1/clients/{cid}/scan",headers=self.h)
+        rows=self.client.get(f"/v1/clients/{cid}/findings",headers=self.h).json()
+        self.assertEqual(rows[0]["status"],"open")
+        self.assertEqual(self.client.get(f"/v1/clients/{cid}/dashboard",headers=self.h).json()["active_threats"],1)
+    def test_exploited_incident_urgency_is_not_mislabelled_as_cvss_severity(self):
+        client=self.client.post("/v1/clients",headers=self.h,json={"name":"KEV Ltd"}).json()
+        cid=client["id"]
+        self.client.post(f"/v1/clients/{cid}/components",headers=self.h,json={"ecosystem":"pypi","package":"django","version":"4.2.1"})
+        self.client.post("/v1/incidents",headers=self.h,json={"id":"kev:django","source":"cisa_kev","source_id":"kev:django","published_at":"2026-11-05T00:00:00Z","severity":"unknown","ecosystem":"pypi","package":"django","title":"Known exploited","affected_versions":"<4.2.2","exploited":True})
+        self.client.post(f"/v1/clients/{cid}/scan",headers=self.h)
+        finding=self.client.get(f"/v1/clients/{cid}/findings",headers=self.h).json()[0]
+        self.assertEqual(finding["severity"],"unknown")
+        self.assertIn("confirmed exploitation",finding["urgency"])
     def test_unmapped_kev_does_not_match_every_component(self):
         client=self.client.post("/v1/clients",headers=self.h,json={"name":"No false positives"}).json()
         cid=client["id"]
