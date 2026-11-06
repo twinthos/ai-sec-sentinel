@@ -369,7 +369,7 @@ def findings(client_id: str, status: Optional[str]=None):
         if status:
             if status not in STATUSES: raise HTTPException(422,"Invalid status")
             sql+=" AND f.status=?"; args.append(status)
-        sql+=" ORDER BY CASE i.severity WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END DESC,i.published_at DESC"
+        sql+=" ORDER BY CASE WHEN i.exploited=1 THEN 5 WHEN i.severity='critical' THEN 4 WHEN i.severity='high' THEN 3 WHEN i.severity='medium' THEN 2 ELSE 1 END DESC,i.published_at DESC"
         rows=[dict(r) for r in c.execute(sql,args)]
     for r in rows:
         r["references"]=json.loads(r.pop("references_json"))
