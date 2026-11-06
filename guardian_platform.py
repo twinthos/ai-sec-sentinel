@@ -479,18 +479,56 @@ def export_csv(client_id: str):
 
 @app.get("/v1/clients/{client_id}/export.pdf", dependencies=[Depends(require_key)])
 def export_pdf(client_id: str):
-    try: from reportlab.lib.pagesizes import A4; from reportlab.pdfgen import canvas
-    except ImportError: raise HTTPException(503,"Install reportlab to enable PDF exports")
-    data=dashboard(client_id); rows=findings(client_id)
-    buf=io.BytesIO(); p=canvas.Canvas(buf,pagesize=A4); width,height=A4; y=height-48
-    p.setFont("Helvetica-Bold",18); p.drawString(42,y,"Twinthos Sentinel — Security report"); y-=28
-    p.setFont("Helvetica",10); p.drawString(42,y,f"{data['client']['name']} | Generated {utcnow()}"); y-=22
-    p.drawString(42,y,f"Active: {data['active_threats']}  Resolved: {data['resolved_threats']}  Stack coverage: {data['version_inventory_completeness_pct']}%"); y-=28
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_LEFT
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import mm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+        from xml.sax.saxutils import escape
+    except ImportError:
+        raise HTTPException(503,"Install reportlab to enable PDF exports")
+    data=dashboard(client_id); rows=findings(client_id); buf=io.BytesIO()
+    doc=SimpleDocTemplate(buf,pagesize=A4,rightMargin=17*mm,leftMargin=17*mm,topMargin=16*mm,bottomMargin=16*mm,
+      title="Twinthos Sentinel Security Report",author="Twinthos Sentinel")
+    base=getSampleStyleSheet()
+    title=ParagraphStyle("SentinelTitle",parent=base["Title"],fontName="Helvetica-Bold",fontSize=20,leading=24,alignment=TA_LEFT,spaceAfter=5)
+    sub=ParagraphStyle("SentinelSub",parent=base["Normal"],fontSize=9,textColor=colors.HexColor("#596575"),spaceAfter=10)
+    heading=ParagraphStyle("SentinelHeading",parent=base["Heading2"],fontSize=12,leading=15,spaceBefore=12,spaceAfter=6)
+    body=ParagraphStyle("SentinelBody",parent=base["BodyText"],fontSize=8.5,leading=12,spaceAfter=4,wordWrap="CJK")
+    small=ParagraphStyle("SentinelSmall",parent=body,fontSize=7.5,leading=10,textColor=colors.HexColor("#596575"))
+    story=[Paragraph("Twinthos Sentinel — Security report",title),
+      Paragraph(f"{escape(data['client']['name'])} · {escape(data['client']['region'])} · Generated {escape(utcnow())}",sub)]
+    summary=[
+      ["Active findings",str(data["active_threats"]),"Resolved",str(data["resolved_threats"])],
+      ["Inventory components",str(data["components"]),"Known versions",f"{data['version_known_components']} ({data['version_inventory_completeness_pct']}%)"],
+      ["Last Guardian scan",str(data["last_scan_at"] or "Not yet scanned"),"Report scope","Client-matched incidents only"]
+    ]
+    table=Table(summary,colWidths=[38*mm,42*mm,32*mm,65*mm])
+    table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#F1F4F7")),
+      ("TEXTCOLOR",(0,0),(-1,-1),colors.HexColor("#17212B")),("FONTNAME",(0,0),(-1,-1),"Helvetica"),
+      ("FONTSIZE",(0,0),(-1,-1),8),("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#D5DCE4")),
+      ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),7),("RIGHTPADDING",(0,0),(-1,-1),7),
+      ("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7)]))
+    story.extend([table,Paragraph("Findings and remediation",heading)])
+    if not rows:
+        story.append(Paragraph("No incidents currently match the recorded client inventory. This is not proof that the environment is vulnerability-free; inventory and source coverage may be incomplete.",body))
     for row in rows:
-        line=f"{row['severity'].upper()} | {row.get('cve') or row['id']} | {row['package'] or 'Unmapped'} | {row['status']} | {row['urgency']}"
-        p.drawString(42,y,line[:110]); y-=15
-        if y<55: p.showPage(); y=height-48; p.setFont("Helvetica",9)
-    p.save(); buf.seek(0)
+        refs=row.get("references") or []
+        details=[
+          Paragraph(f"<b>{escape(str(row.get('severity','unknown')).upper())} · {escape(str(row.get('cve') or row['id']))}</b> — {escape(str(row.get('title') or 'Untitled advisory'))}",body),
+          Paragraph(f"Component: {escape(str(row.get('package') or 'Unmapped'))} · Recorded version: {escape(str(row.get('component_version') or 'unknown'))} · Match: {escape(str(row.get('match_state')))} · Status: {escape(str(row.get('status')))}",small),
+          Paragraph(f"Urgency: {escape(str(row.get('urgency')))} · Owner: {escape(str(row.get('owner') or 'Unassigned'))} · Due: {escape(str(row.get('due_at') or 'Not set'))}",small),
+          Paragraph(f"Remediation: {escape(str(row.get('remediation') or 'Review the original vendor advisory; no fix instruction was supplied in the source record.'))}",body)]
+        if row.get("exploited"):
+            details.append(Paragraph("Known exploited vulnerability — prioritise immediate exposure assessment.",body))
+        safe_refs=[escape(str(ref)) for ref in refs[:5] if str(ref).startswith(("https://","http://"))]
+        if safe_refs:
+            details.append(Paragraph("Source references: "+ " · ".join(safe_refs),small))
+        story.append(KeepTogether(details+[Spacer(1,4)]))
+    story.extend([Spacer(1,8),Paragraph("Important: This report reflects the recorded inventory and ingested advisory data at generation time. Confirm findings against deployed assets and original vendor advisories. It is not a penetration test, compliance certificate or guarantee of absence of vulnerabilities.",small)])
+    doc.build(story); buf.seek(0)
     return StreamingResponse(buf,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="sentinel-{client_id}-report.pdf"'})
 
 @app.post("/v1/clients/{client_id}/alerts/retry", dependencies=[Depends(require_key)])
