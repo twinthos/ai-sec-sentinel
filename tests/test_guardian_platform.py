@@ -91,6 +91,19 @@ class PlatformTests(unittest.TestCase):
         self.client.post("/v1/incidents",headers=self.h,json={"id":"cisa-kev:CVE-2026-0001","source":"cisa_kev","source_id":"CVE-2026-0001","published_at":"2026-11-05T00:00:00Z","severity":"critical","cve":"CVE-2026-0001","title":"Unmapped KEV"})
         scan=self.client.post(f"/v1/clients/{cid}/scan",headers=self.h).json()
         self.assertEqual(scan["new_findings"],0)
+    def test_alert_history_is_scoped_to_client(self):
+        client=self.client.post("/v1/clients",headers=self.h,json={"name":"Alert Ltd"}).json()
+        cid=client["id"]
+        self.client.post(f"/v1/clients/{cid}/components",headers=self.h,json={"ecosystem":"npm","package":"axios","version":"1.0.0"})
+        self.client.post("/v1/incidents",headers=self.h,json={"id":"alert:axios","source":"test","source_id":"alert:axios","published_at":"2026-11-05T00:00:00Z","severity":"high","ecosystem":"npm","package":"axios","title":"Alert test","affected_versions":"<1.1.0"})
+        self.client.post(f"/v1/clients/{cid}/scan",headers=self.h)
+        finding=self.client.get(f"/v1/clients/{cid}/findings",headers=self.h).json()[0]
+        with gp.db() as c:
+            c.execute("INSERT INTO alert_deliveries(finding_id,channel,status,attempt_count,last_attempt,error) VALUES(?,?,?,?,?,?)",(finding["id"],"slack","failed",1,gp.utcnow(),"test failure"))
+        alerts=self.client.get(f"/v1/clients/{cid}/alerts",headers=self.h).json()
+        self.assertEqual(len(alerts),1)
+        self.assertEqual(alerts[0]["channel"],"slack")
+        self.assertEqual(alerts[0]["status"],"failed")
     def test_incident_filter(self):
         self.client.post("/v1/incidents",headers=self.h,json={"id":"test:1","source":"test","published_at":"2026-11-05T00:00:00Z","severity":"critical","title":"Test"})
         self.assertEqual(len(self.client.get("/v1/incidents?severity=critical",headers=self.h).json()),1)
