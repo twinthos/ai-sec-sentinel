@@ -52,6 +52,7 @@ Do not expose the API directly to the public internet without TLS termination, r
 - `GET /v1/clients/{id}/dashboard` client overview
 - `GET /v1/clients/{id}/monthly-report?month=YYYY-MM` matched incident trends and recommendations
 - `GET /v1/clients/{id}/export.json|csv|pdf` reporting
+- `GET /v1/clients/{id}/alerts` client-scoped alert delivery history
 - `POST /v1/clients/{id}/alerts/retry` retry failed client alert deliveries
 
 All endpoints except `/health` require `X-API-Key`.
