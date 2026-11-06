@@ -25,8 +25,11 @@ def deliver_finding(finding_id):
           WHERE f.id=?""",(finding_id,)).fetchone()
     if not row: return []
     item=dict(row); refs=json.loads(item.pop("references_json")); results=[]
+    with db() as c:
+        sent={r["channel"] for r in c.execute("SELECT channel FROM alert_deliveries WHERE finding_id=? AND status='sent'",(finding_id,))}
+
     smtp_host=os.getenv("SENTINEL_SMTP_HOST")
-    if item.get("contact_email") and smtp_host:
+    if item.get("contact_email") and smtp_host and "email" not in sent:
         try:
             msg=EmailMessage()
             msg["Subject"]=f"[Sentinel {item['severity'].upper()}] {item['cve'] or item['title']}"
@@ -69,10 +72,10 @@ This is an automated security notification. Verify applicability against your de
         except Exception as exc:
             _record(finding_id,"email","failed",str(exc)[:300]);results.append({"channel":"email","status":"failed","error":str(exc)[:160]})
     webhook=os.getenv("SENTINEL_SLACK_WEBHOOK_URL")
-    if webhook:
+    if webhook and "slack" not in sent:
         try:
             u=urlparse(webhook)
-            if u.scheme!="https" or u.hostname!="hooks.slack.com" or not u.path.startswith("/services/"):
+            if u.scheme!="https" or u.hostname!="hooks.slack.com" or u.port not in {None,443} or u.username or u.password or not u.path.startswith("/services/"):
                 raise ValueError("Slack webhook must be an HTTPS hooks.slack.com/services URL")
             text=(f"*Twinthos Sentinel — {item['severity'].upper()}*\n"
               f"*Client:* {item['name']}\n*Incident:* {item['cve'] or item['title']}\n"
@@ -81,7 +84,7 @@ This is an automated security notification. Verify applicability against your de
               f"*Fix:* {item['fixed_version'] or 'Not specified'}\n"
               f"*Exploitation:* {'Known exploited (CISA KEV)' if item['exploited'] else 'Not confirmed'}\n"
               f"*Action:* {item['remediation'] or 'Review original vendor advisory.'}")
-            response=requests.post(webhook,json={"text":text},timeout=(3,10));response.raise_for_status()
+            response=requests.post(webhook,json={"text":text},timeout=(3,10),allow_redirects=False);response.raise_for_status()
             _record(finding_id,"slack","sent");results.append({"channel":"slack","status":"sent"})
         except Exception as exc:
             _record(finding_id,"slack","failed",str(exc)[:300]);results.append({"channel":"slack","status":"failed","error":str(exc)[:160]})
