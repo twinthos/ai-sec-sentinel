@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 import guardian_platform as gp
 
 class PlatformTests(unittest.TestCase):
+    # End-to-end API contract tests for the client Guardian service.
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
         gp.DB_PATH=os.path.join(self.tmp.name,"test.sqlite")
