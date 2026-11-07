@@ -221,8 +221,9 @@ class TestPolicyEngine(unittest.TestCase):
         pe = PolicyEngine()
         safe, _ = pe.check_ssrf("http://169.254.169.254/")
         self.assertFalse(safe)
-        safe2, _ = pe.check_ssrf("http://example.com/")
+        safe2, _ = pe.check_ssrf("https://example.com/", {"example.com"})
         self.assertTrue(safe2)
+        self.assertFalse(pe.check_ssrf("https://example.com/")[0])
 
 
 class TestBlastRadius(unittest.TestCase):

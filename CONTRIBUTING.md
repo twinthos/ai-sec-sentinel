@@ -1,36 +1,43 @@
 # Contributing to Twinthos Sentinel
 
-## How to contribute
+## Scope and responsible use
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Make your changes
-4. Run tests: `python -m unittest tests.test_sentinel_core tests.test_comprehensive -v`
-5. Commit with a clear message
-6. Push to your fork
-7. Open a pull request
+## Start with the scoped proof
 
-## Code standards
+```sh
+python3 ai_sec_sentinel.py --quickstart
+```
 
-- Python 3.10+ compatible
-- All new features must have tests
-- No secrets in code or config files
-- Use `privacy.redact_text()` for any user-facing output
-- Follow existing code style (PEP 8)
+This runs only local synthetic data. For the actual networked monitor and state migration, read [live monitoring](docs/LIVE-MONITORING.md) and [state and privacy](docs/STATE-AND-PRIVACY.md).
 
-## Security
+A reviewable security change must state the trust boundary, allowed and denied behaviours, data leaving the machine, and the exact negative tests. Keep reviews narrow and reproducible. New privileged tools and egress destinations require a new threat model. Consult the [roadmap](docs/ROADMAP.md) and [ecosystem comparison](docs/ECOSYSTEM.md).
 
-- Report vulnerabilities via SECURITY.md process
-- Do not open public issues for security vulnerabilities
-- All PRs are reviewed for security implications
+This is a defensive, open-source **reference** tool. Do not submit live customer records, exploit payloads, passwords, access tokens or confidential infrastructure details. Report vulnerabilities privately using [GitHub Security Advisories](https://github.com/twinthos/ai-sec-sentinel/security/advisories/new), not a public issue.
 
-## Testing
+## Local development
 
-- Run full test suite before submitting PR
-- Add tests for new features
-- Do not skip failing tests
-- Do not modify test expectations to make tests pass
+Requires Python **3.11+**. The scoped file adapter uses POSIX directory file descriptors and is tested on Linux. The scanner uses the dependencies declared in `requirements.txt`.
 
-## License
+```sh
+git clone https://github.com/twinthos/ai-sec-sentinel.git
+cd ai-sec-sentinel
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install -r requirements.txt
+python3 -m unittest discover -s tests -v
+python3 examples/proof.py
+python3 defensive_event_triage.py --input examples/fixtures/synthetic_cloud_events.jsonl
+```
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+These commands use synthetic fixtures. **Do not run live monitoring mode in CI or a PR.** Live monitoring needs an explicitly configured and tested alert destination. A preview (`python3 ai_sec_sentinel.py --dry-run --since-hours 24`) may fetch public feeds but does not send notifications.
+
+## Changes
+
+- Add negative tests for every new permission or tool.
+- Keep the MCP reference boundary closed to shell, writes, network and unknown operations unless a separate, reviewed threat model justifies expansion.
+- Demonstrate actual tool enforcement rather than trusting an API response or an AI model's refusal.
+- Support public claims with dated source material. Distinguish synthetic examples from field evidence and ensure tests are reproducible.
+- Do not claim production protection, compliance certification, real-world detection efficacy or exploit prevention from this repository.
+- Never include sensitive logs in public GitHub issues, PR bodies or screenshots.
+
+A reviewable PR describes the threat, the specific permitted and denied behaviours, the tests, and residual risk.

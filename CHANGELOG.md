@@ -2,6 +2,22 @@
 
 All notable changes to Twinthos Sentinel are documented here.
 
+## Unreleased — 2026-11-03
+
+### Verified repository improvements
+- Added synthetic MCP quickstart and no-argument safety, plus a reproducible CI proof.
+- Corrected destination-policy allowlist fallback and URL precheck behaviour; added negative tests.
+- Added privacy checks for outbound messages and explicit consent for raw lockfile uploads.
+- Moved default local state outside the source checkout, with required operator migration guidance.
+- Added responsible issue/PR templates, scoped capability documentation and a development roadmap.
+- Added scheduled dependency and static security checks (their outcome must be inspected separately).
+
+### Limits and corrections
+- The prior changelog describes security capabilities at a high level; individual modules are not necessarily wired into a protected production agent.
+- HTTPS security headers for the live GitHub Pages website cannot be established from a static repository alone; see the website SECURITY.md.
+- 'Local-first' does not mean a networked CVE/OSV scan is offline: package identifiers, CVE identifiers and HTTP request metadata may be transmitted.
+- No current CI badge demonstrates an independently audited, enterprise-grade or production-proven protection service.
+
 ## [1.4.1] - 2026-11-01
 
 ### Added

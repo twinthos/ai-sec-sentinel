@@ -1,0 +1,26 @@
+name: Focused improvement
+description: Propose a specific user outcome and a way to verify it.
+title: "[Idea]: "
+body:
+  - type: markdown
+    attributes:
+      value: Check docs/ROADMAP.md first. Use synthetic examples only. New privileged tools need a threat-model review.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to accomplish?
+      description: Describe the user and the task that is difficult today.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What would a working result look like?
+      description: Give a command, example or observable acceptance check.
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Permissions and data flow
+      description: Does the proposal read private files, send data, store state or add a tool? Describe categories, never actual secrets.

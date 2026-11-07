@@ -36,7 +36,7 @@ Files outside the permitted root; workspace file contents; tool permissions; loc
 ## Out-of-scope and bypasses
 
 - An agent with **another** shell, file API, broader filesystem permission or network channel can bypass the adapter. Integration requires removing alternate paths.
-- Files in the allowed workspace may contain sensitive data; path confinement alone is not data classification or DLP.
+- An allowed file might contain sensitive data. The adapter now rejects documents that trigger its known credential/PII patterns *before returning content*. This is best-effort screening and cannot detect every secret or confidential fact; dedicated workspace provisioning and data classification are still required.
 - A compromised OS user, process or policy administrator can modify files or falsify local ledger history.
 - No hardware-based identity, signed logs, MFA, remote attestation, cross-process authorization, immutable event store, distributed locking or high availability.
 - API Guardian registration is descriptive; it is not cryptographic attestation.

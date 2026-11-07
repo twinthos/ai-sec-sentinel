@@ -18,10 +18,10 @@ FORBIDDEN_FILES = {"id_rsa", "id_ed25519", ".env", ".netrc", "service-account.js
                    "secrets.json", "credentials.json", "guardian_ledger.jsonl",
                    "sentinel_state.json", "sentinel_feedback.json"}
 CREDENTIAL_PATTERNS = [
-    re.compile(r"\\b(?:AKIA|ASIA)[A-Z0-9]{16}\\b"),
-    re.compile(r"\\bgh[pousr]_[A-Za-z0-9]{36,}\\b"),
-    re.compile(r"\\bgithub_pat_[A-Za-z0-9_]{50,}\\b"),
-    re.compile(r"\\bxox[baprs]-[A-Za-z0-9-]{24,}\\b"),
+    re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{50,}\b"),
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{24,}\b"),
     re.compile(r"sk-proj-[A-Za-z0-9_-]{24,}"),
     re.compile(r"-----BEGIN (?:OPENSSH |RSA |EC |DSA )?PRIVATE KEY-----"),
 ]

@@ -43,7 +43,7 @@ The first suite checks handshake, exposed tools, a real stdio subprocess, succes
 ## Security boundary and limitations
 
 - `GUARDIAN_AGENT_ID` and the Guardian Gate are **separate**, decision-only facilities. This MCP server instead uses its own host-set `--agent-id` with local `GuardedWorkspace`. Do not claim the API automatically intercepts the MCP stream.
-- Only `.md` / `.txt` files without hidden or secret-like path components are eligible. Content may still contain confidential information if an operator places it in an allowed document. **Do not put real customer data into the example workspace.**
+- Only `.md` / `.txt` files without hidden or secret-like path components are eligible. The adapter also rejects file content matching a small set of credential and personal-data patterns; the absence of a match is **not** a confidentiality guarantee. Content may still contain confidential information if an operator places it in an allowed document. **Do not put real customer data into the example workspace.**
 - The content of any allowed file is **untrusted data**. A model could still obey a malicious sentence in a retrieved file, but it cannot execute shell/write/network operations *through this MCP server*. Alternative tools must be independently isolated.
 - Ledger is locally hash chained, not signed, externally anchored or protected from a compromised administrator. Log storage and the model process should have separate permissions in production.
 - This server does not provide client authentication beyond a trusted local process launcher or end-to-end identity attestation. It is not production-hardened against a compromised host.

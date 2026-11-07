@@ -26,6 +26,7 @@ The live feed preview requires Internet access; nonzero errors are meaningful an
 | Prohibited tool never reaches an executor | Fixed operation dispatch | `test_unknown_tool_cannot_delete_file` | Other host tools may exist |
 | Path confinement | Descriptor-relative POSIX open, no-follow | `test_parent_path_traversal_is_denied`, symlink tests | POSIX/Linux scope |
 | Refuse unapproved `ask` | Policy decision gate | `test_ask_does_not_execute` | No approval UI provided |
+| Avoid obvious secrets in returned document content | Fail-closed pattern screening immediately before allowed return | `test_authorized_read_does_not_return_obvious_embedded_secrets` | Pattern coverage is incomplete; not a data-loss-prevention product |
 | Avoid leaked data in evidence | Redacted ledger entry | `test_permitted_read_returns_exact_content` | Host logs are separate |
 | Fail when evidence cannot be written | Durable decision before return | `test_fails_closed_when_ledger_cannot_write` | Not immutable |
 | Notification retry and dry-run isolation | Scanner delivery/seen logic | `test_runtime_safety.py` | External channel receipt not guaranteed |

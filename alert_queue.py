@@ -14,7 +14,9 @@ import hashlib
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
-DB_PATH = Path(os.getenv("SENTINEL_DB_PATH", "sentinel_alerts.db"))
+# Alert payloads may contain identifiers. The default is outside the source tree.
+_DEFAULT_DATA_DIR = Path(os.getenv("SENTINEL_DATA_DIR") or (Path.home() / ".local" / "share" / "twinthos-sentinel"))
+DB_PATH = Path(os.getenv("SENTINEL_DB_PATH") or (_DEFAULT_DATA_DIR / "sentinel_alerts.db"))
 MAX_RETRIES = 5
 BASE_BACKOFF = 2  # seconds
 MAX_BACKOFF = 300  # 5 minutes
@@ -22,7 +24,13 @@ MAX_BACKOFF = 300  # 5 minutes
 
 def get_db():
     """Get SQLite connection with WAL mode."""
+    if DB_PATH.is_symlink():
+        raise RuntimeError("Refuse symlinked Sentinel alert database")
+    DB_PATH.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
+    # SQLite's default creation mode depends on the process umask.
+    if os.name == "posix":
+        os.chmod(DB_PATH, 0o600)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.row_factory = sqlite3.Row

@@ -27,7 +27,7 @@ SECRET_PATTERNS = [
 
 # Files that should never be transmitted
 SENSITIVE_FILES = {
-    ".env", ".env.local", ".env.production",
+    ".env", ".env.*",
     "id_rsa", "id_ed25519", "id_ecdsa",
     "credentials.json", "service-account.json",
     "*.pem", "*.key", "*.p12", "*.pfx",
@@ -45,23 +45,39 @@ def redact_text(text: str) -> str:
 
 
 def redact_dict(d: dict, depth: int = 0) -> dict:
-    """Redact secrets from a dictionary recursively."""
-    if depth > 10:
-        return d
-    result = {}
-    for k, v in d.items():
-        key_lower = k.lower()
-        if any(s in key_lower for s in ["password", "secret", "token", "key", "credential", "auth"]):
-            result[k] = "[REDACTED]"
-        elif isinstance(v, dict):
-            result[k] = redact_dict(v, depth + 1)
-        elif isinstance(v, str):
-            result[k] = redact_text(v)
-        elif isinstance(v, list):
-            result[k] = [redact_dict(i, depth + 1) if isinstance(i, dict) else redact_text(i) if isinstance(i, str) else i for i in v]
-        else:
-            result[k] = v
-    return result
+    """Recursively mask sensitive values, including lists within lists.
+
+    A depth limit or cyclic container is replaced with an explicit marker, not
+    returned unchanged. This is best-effort privacy hygiene, not DLP assurance.
+    """
+    active = set()
+
+    def scrub(value, level):
+        if level > 10:
+            return "[REDACTED: nesting limit]"
+        if isinstance(value, (dict, list, tuple)):
+            identity = id(value)
+            if identity in active:
+                return "[REDACTED: cyclic container]"
+            active.add(identity)
+            try:
+                if isinstance(value, dict):
+                    cleaned = {}
+                    for k, v in value.items():
+                        key_lower = str(k).lower()
+                        if any(word in key_lower for word in ("password", "secret", "token", "key", "credential", "auth")):
+                            cleaned[k] = "[REDACTED]"
+                        else:
+                            cleaned[k] = scrub(v, level + 1)
+                    return cleaned
+                return [scrub(item, level + 1) for item in value]
+            finally:
+                active.remove(identity)
+        if isinstance(value, str):
+            return redact_text(value)
+        return value
+
+    return scrub(d, depth)
 
 
 def is_sensitive_file(path: str) -> bool:
@@ -118,16 +134,16 @@ def can_upload_lockfile(consent: bool, local_only: bool) -> bool:
 def explain_external_services() -> str:
     """Explain which external services receive data."""
     return """
-External services that may receive package data:
-1. OSV.dev (api.osv.dev) — receives package names and versions for vulnerability lookup.
-   Data sent: package name, version, ecosystem. No file contents, no paths, no credentials.
-2. CISA KEV feed (cisa.gov) — read-only feed download. No data sent.
-3. NVD/EPSS (nvd.nist.gov, first.org) — read-only API queries by CVE ID. No package data sent.
-4. Telegram/Slack/Discord — receives alert summaries only (CVE IDs, severity, package names).
-   No raw lockfile contents, no credentials, no PII.
-5. News RSS feeds — read-only. No data sent.
-
-In local-only mode: NO external services are contacted. All parsing and analysis is local.
+Quickstart and synthetic demonstrations run offline. Live feed scanning needs Internet access.
+Services that may receive data:
+1. cve.now: feed requests, and full raw lockfile content only if deliberately enabled.
+2. OSV.dev: package names, pinned versions and ecosystems for dependency lookups.
+3. CISA and FIRST EPSS: feed requests or CVE identifiers.
+4. Telegram, Slack and Discord: configured notification messages, descriptions and links.
+5. Configured RSS sites: feed requests.
+Network providers can also observe request metadata. A dry-run disables notifications,
+not external feed or OSV requests. Redaction is best effort, not comprehensive DLP.
+No general offline-only flag exists for the live scanner. Review destinations and data first.
 """
 
 
