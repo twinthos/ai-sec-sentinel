@@ -1,13 +1,20 @@
 {
   "version": "1.4.1",
   "scan_interval_minutes": 60,
-  "alert_min_severity": 1,
-  "auto_remediate": false,
+  "alert_min_severity": 0,
+  "auto_remediate": true,
   "allow_lockfile_upload": false,
-  "learn_from_actions": false,
-  "suppliers": [],
+  "learn_from_actions": true,
+  "suppliers": [
+    "openai",
+    "anthropic",
+    "langchain",
+    "mcp",
+    "requests",
+    "flask"
+  ],
   "news": {
-    "enabled": false,
+    "enabled": true,
     "keywords": [
       "langchain",
       "langgraph",
@@ -31,11 +38,12 @@
     "sources": [
       "https://www.bleepingcomputer.com/feed/",
       "https://krebsonsecurity.com/feed/",
-      "https://nodejs.org/en/blog/vulnerability/"
+      "https://nodejs.org/en/blog/vulnerability/",
+      "https://www.cisa.gov/news-events/cybersecurity-advisories/rss.xml"
     ]
   },
   "telegram": {
-    "enabled": false
+    "enabled": true
   },
   "webhook_url": "",
   "webhook_platform": "slack"

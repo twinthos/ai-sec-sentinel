@@ -43,6 +43,16 @@ try:
 except ImportError:
     RISK_AVAILABLE = False
 
+def _resolve_host(hostname: str) -> bool:
+    """Check if a hostname resolves (DNS health check)."""
+    import socket
+    try:
+        socket.gethostbyname(hostname)
+        return True
+    except socket.gaierror:
+        return False
+
+
 def _retry(fn, max_attempts=3, delay=2):
     """Retry a function with exponential backoff."""
     import time as _t
