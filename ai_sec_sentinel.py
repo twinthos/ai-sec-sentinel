@@ -1036,6 +1036,14 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
             if not dry_run:
                 seen.add(raw_id)
             alerts_sent += 1
+            # EPSS high-score alert: if EPSS >= 0.7, send additional high-priority alert
+            if epss is not None and epss >= 0.7:
+                epss_msg = (
+                    f"🚨 <b>HIGH EPSS ALERT</b> — {raw_id} has EPSS score {epss:.2f}\n"
+                    f"This vulnerability has a high probability of exploitation.\n"
+                    f"Priority: IMMEDIATE"
+                )
+                send_telegram(epss_msg, token, chat, cve_id=raw_id)
         else:
             # Queue failed alert for retry - do NOT mark as seen
             print(f"  Alert failed for {raw_id}, will retry next scan")
