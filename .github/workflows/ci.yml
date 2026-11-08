@@ -27,6 +27,13 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Reject tracked private files and high-confidence credentials
         run: python tools/check_repo_exposure.py
+      - name: Verify production acceptance is opt-in, never a CI notification
+        run: |
+          bash -n tools/verify_compose_live.sh
+          if bash tools/verify_compose_live.sh; then
+            echo "ERROR: live acceptance was permitted without operator opt-in"
+            exit 1
+          fi
       - name: Compile Python sources
         run: python -m compileall -q .
       - name: Run offline security regression tests
