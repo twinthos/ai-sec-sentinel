@@ -5,8 +5,9 @@ Four layers: OBSERVE, UNDERSTAND, CONTROL, PROVE.
 Deny-by-default. Priority-ordered rules. No override of higher-priority deny.
 """
 
-import time
 import hashlib
+import secrets
+import threading
 import json
 from enum import Enum
 from typing import Optional, Dict, List, Tuple
@@ -49,6 +50,7 @@ class PolicyEngine:
     def __init__(self):
         self.rules: List[PolicyRule] = []
         self.approvals: Dict[str, ApprovalToken] = {}
+        self._approval_lock = threading.Lock()
         self.blocked_destinations = set()
         self.allowed_destinations = set()
     
@@ -78,8 +80,17 @@ class PolicyEngine:
             
             # Check expiry
             if rule.expires:
-                if datetime.now(timezone.utc).isoformat() > rule.expires:
-                    continue  # Expired rule
+                try:
+                    raw_expiry = datetime.fromisoformat(rule.expires.replace("Z", "+00:00"))
+                    if raw_expiry.tzinfo is None or raw_expiry.utcoffset() is None:
+                        raise ValueError("Timezone-aware expiry required")
+                    expired = datetime.now(timezone.utc) > raw_expiry.astimezone(timezone.utc)
+                except (TypeError, AttributeError, ValueError):
+                    # An invalid BLOCK expiry never weakens a restriction.
+                    # Invalid ALLOW / ASK rules cannot grant authority.
+                    expired = rule.action != Decision.BLOCK
+                if expired:
+                    continue
             
             # Check condition
             if not self._check_condition(rule, agent_id, tool, params):
@@ -161,24 +172,35 @@ class PolicyEngine:
                 )
             return False
         if rule.condition == "resource":
+            # This condition accepts a *block* list only. Using its name in
+            # an ALLOW rule must not grant a read of a blocked resource.
+            if rule.action != Decision.BLOCK:
+                return False
             resource = params.get("path", params.get("resource", ""))
             blocked_resources = rule.condition_params.get("blocked", [])
-            for br in blocked_resources:
-                if br in resource:
-                    return True
-            return False
+            if not isinstance(resource, str) or not isinstance(blocked_resources, (list, tuple)):
+                return True
+            return any(isinstance(br, str) and bool(br) and br in resource
+                       for br in blocked_resources)
         if rule.condition == "agent":
             target_agents = rule.condition_params.get("agents", [])
             return agent_id in target_agents
         if rule.condition == "time":
-            # Time-based conditions
-            return True  # Simplified
+            # No validated time-window evaluator has been implemented.
+            # An unsupported time-allow rule must never grant authority.
+            # Conservative block rules remain active until reviewed.
+            return rule.action == Decision.BLOCK
         return False  # Unknown condition — reject
     
     def create_approval(self, agent_id: str, tool: str, params: dict, approved_by: str, expiry_minutes: int = 5) -> str:
         """Create a time-limited approval token tied to exact action."""
-        params_hash = hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest()
-        token_id = hashlib.sha256(f"{agent_id}:{tool}:{params_hash}:{time.time()}".encode()).hexdigest()[:16]
+        if type(expiry_minutes) is not int or not 1 <= expiry_minutes <= 60:
+            raise ValueError("Approval lifetime must be 1–60 minutes")
+        if not isinstance(approved_by, str) or not approved_by.strip():
+            raise ValueError("A verified human approver identity is required")
+        params_hash = hashlib.sha256(json.dumps(params, sort_keys=True, allow_nan=False).encode()).hexdigest()
+        # Use unpredictable OS-backed entropy, not a guessable timestamp.
+        token_id = secrets.token_urlsafe(32)
         now = datetime.now(timezone.utc)
         token = ApprovalToken(
             token_id=token_id,
@@ -189,27 +211,34 @@ class PolicyEngine:
             created_at=now.isoformat(),
             expires_at=(now + timedelta(minutes=expiry_minutes)).isoformat(),
         )
-        self.approvals[token_id] = token
+        with self._approval_lock:
+            self.approvals[token_id] = token
         return token_id
     
     def use_approval(self, token_id: str, agent_id: str, tool: str, params: dict) -> Tuple[bool, str]:
         """Use an approval token. Prevents replay. Returns (valid, reason)."""
-        token = self.approvals.get(token_id)
-        if not token:
-            return False, "Token not found"
-        if token.used:
-            return False, "Token already used (replay prevented)"
-        if token.agent_id != agent_id:
-            return False, "Token agent mismatch"
-        if token.tool != tool:
-            return False, "Token tool mismatch"
-        params_hash = hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest()
-        if token.params_hash != params_hash:
-            return False, "Token params mismatch (exact action required)"
-        if datetime.now(timezone.utc).isoformat() > token.expires_at:
-            return False, "Token expired"
-        token.used = True
-        return True, "OK"
+        with self._approval_lock:
+            token = self.approvals.get(token_id)
+            if not token:
+                return False, "Token not found"
+            if token.used:
+                return False, "Token already used (replay prevented)"
+            if token.agent_id != agent_id:
+                return False, "Token agent mismatch"
+            if token.tool != tool:
+                return False, "Token tool mismatch"
+            try:
+                params_hash = hashlib.sha256(
+                    json.dumps(params, sort_keys=True, allow_nan=False).encode()
+                ).hexdigest()
+            except (TypeError, ValueError):
+                return False, "Invalid action parameters"
+            if not secrets.compare_digest(token.params_hash, params_hash):
+                return False, "Token params mismatch (exact action required)"
+            if datetime.now(timezone.utc) > datetime.fromisoformat(token.expires_at):
+                return False, "Token expired"
+            token.used = True
+            return True, "OK"
     
     @staticmethod
     def _url_host(url: object):
