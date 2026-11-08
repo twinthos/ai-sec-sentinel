@@ -24,7 +24,16 @@ OWASP_LLM_TOP10 = {
     "LLM10": "Model Theft",
 }
 
-# Compliance vs Reality gap (from @ekryski insight: SOC2/PCI compliant companies still get hacked)
+# Attack surface / zero-trust (from @patopet insight: abstract services from internet)
+# "Why allow an unauthenticated anonymous agent of an attacker to interact with your systems?"
+# The sentinel flags systems that expose services to the internet without authentication.
+# Zero-trust: every interaction must be authenticated, even internal ones.
+ZERO_TRUST_NOTE = (
+    "Zero-trust: abstract services from the internet. "
+    "No unauthenticated anonymous agent should interact with your systems. "
+    "Every interaction requires authentication. Treat 'internet-facing' as 'attack-facing'."
+)
+
 # Compliance is a baseline, not a guarantee. The sentinel detects real vulnerabilities,
 # not just checkbox compliance. Treat compliance as the floor, not the ceiling.
 COMPLIANCE_GAP_NOTE = (
@@ -232,7 +241,38 @@ def check_compliance_gap(findings: list[dict], compliance_certs: list[str] = Non
     return result
 
 
-def generate_risk_report(findings: list[dict]) -> str:
+def check_attack_surface(services: list[dict]) -> dict:
+    """Check for unauthenticated internet-facing services (zero-trust).
+    
+    From @patopet insight: "Why allow an unauthenticated anonymous agent 
+    of an attacker to interact with your systems?"
+    
+    Flags services that are exposed to the internet without authentication.
+    Zero-trust: every interaction must be authenticated.
+    """
+    exposed = []
+    for svc in services:
+        if svc.get("internet_facing") and not svc.get("authenticated"):
+            exposed.append(svc.get("name", "unknown"))
+    
+    result = {
+        "total_services": len(services),
+        "exposed_unauthenticated": len(exposed),
+        "exposed_services": exposed,
+        "zero_trust_violation": len(exposed) > 0,
+        "message": "",
+    }
+    
+    if exposed:
+        result["message"] = (
+            f"ZERO-TRUST VIOLATION: {len(exposed)} service(s) exposed to internet "
+            f"without authentication: {', '.join(exposed)}. "
+            "Abstract services from the internet. Require authentication for all interactions."
+        )
+    else:
+        result["message"] = "No unauthenticated internet-facing services detected. Zero-trust posture maintained."
+    
+    return result
     """Generate a human-readable risk report."""
     risk = calculate_risk_score(findings)
 
