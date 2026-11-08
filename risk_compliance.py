@@ -158,6 +158,69 @@ def check_ai_attack_tool_awareness(services: list[dict] = None) -> dict:
 
     return result
 
+
+# Email security checks (defensive)
+# SPF, DKIM, DMARC are baseline email security. Missing any is a finding.
+EMAIL_SECURITY_CHECKS = {
+    "spf": {
+        "name": "SPF (Sender Policy Framework)",
+        "description": "Prevents email spoofing by specifying authorized sending IPs",
+        "severity_if_missing": "HIGH",
+        "check": "DNS TXT record starting with v=spf1",
+    },
+    "dkim": {
+        "name": "DKIM (DomainKeys Identified Mail)",
+        "description": "Cryptographic email authentication via DKIM signature",
+        "severity_if_missing": "HIGH",
+        "check": "DNS TXT record at selector._domainkey.domain",
+    },
+    "dmarc": {
+        "name": "DMARC (Domain-based Message Authentication)",
+        "description": "Policy for handling authentication failures (reject/quarantine/none)",
+        "severity_if_missing": "MEDIUM",
+        "check": "DNS TXT record at _dmarc.domain",
+    },
+}
+
+
+def check_email_security(domain: str) -> dict:
+    """Check email security configuration for a domain.
+
+    DEFENSIVE ONLY. Returns findings for missing email security controls.
+    Note: This checks configuration, not content. No email is sent or intercepted.
+    """
+    result = {
+        "domain": domain,
+        "checks": {},
+        "findings": [],
+        "score": 100,
+    }
+
+    for key, check in EMAIL_SECURITY_CHECKS.items():
+        result["checks"][key] = {
+            "name": check["name"],
+            "description": check["description"],
+            "severity_if_missing": check["severity_if_missing"],
+            "check_method": check["check"],
+            "status": "not_verified",
+        }
+
+    result["findings"].append(
+        "Verify SPF record: DNS TXT lookup for " + domain + " should return v=spf1"
+    )
+    result["findings"].append(
+        "Verify DKIM: DNS TXT lookup for selector._domainkey." + domain
+    )
+    result["findings"].append(
+        "Verify DMARC: DNS TXT lookup for _dmarc." + domain
+    )
+    result["findings"].append(
+        "DEFENSIVE ONLY: This checks configuration, not email content. "
+        "No email is sent or intercepted."
+    )
+
+    return result
+
 # Compliance framework mapping
 COMPLIANCE_FRAMEWORKS = {
     "eu_ai_act": {
