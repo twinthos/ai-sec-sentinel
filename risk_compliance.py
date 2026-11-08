@@ -24,6 +24,15 @@ OWASP_LLM_TOP10 = {
     "LLM10": "Model Theft",
 }
 
+# Compliance vs Reality gap (from @ekryski insight: SOC2/PCI compliant companies still get hacked)
+# Compliance is a baseline, not a guarantee. The sentinel detects real vulnerabilities,
+# not just checkbox compliance. Treat compliance as the floor, not the ceiling.
+COMPLIANCE_GAP_NOTE = (
+    "Compliance (SOC2, PCI, ISO27001) is a baseline, not a guarantee. "
+    "Companies get hacked while compliant. The sentinel detects real vulnerabilities, "
+    "not just checkbox compliance. Treat compliance as the floor, not the ceiling."
+)
+
 # Compliance framework mapping
 COMPLIANCE_FRAMEWORKS = {
     "eu_ai_act": {
@@ -181,6 +190,46 @@ def map_to_compliance(finding: dict) -> list[str]:
         mappings.append("SRA (confidentiality)")
 
     return mappings
+
+
+def check_compliance_gap(findings: list[dict], compliance_certs: list[str] = None) -> dict:
+    """Check for compliance gaps: systems that are compliant on paper but have real vulnerabilities.
+    
+    From @ekryski insight: SOC2/PCI compliant companies still get hacked.
+    Compliance is a baseline, not a guarantee. This function flags when a system
+    has compliance certifications but also has actual exploitable vulnerabilities.
+    """
+    if compliance_certs is None:
+        compliance_certs = []
+    
+    real_vulns = [f for f in findings if f.get("severity") in ("CRITICAL", "HIGH")]
+    has_real_vulns = len(real_vulns) > 0
+    has_compliance = len(compliance_certs) > 0
+    
+    gap_detected = has_compliance and has_real_vulns
+    
+    result = {
+        "compliance_certs": compliance_certs,
+        "real_vulnerabilities": len(real_vulns),
+        "gap_detected": gap_detected,
+        "message": "",
+    }
+    
+    if gap_detected:
+        result["message"] = (
+            f"COMPLIANCE GAP: System has {', '.join(compliance_certs)} certification "
+            f"but {len(real_vulns)} real vulnerabilities found. "
+            "Compliance is a baseline, not a guarantee. Investigate immediately."
+        )
+    elif has_real_vulns:
+        result["message"] = (
+            f"No compliance certs on file but {len(real_vulns)} real vulnerabilities found. "
+            "Consider compliance framework adoption as a baseline."
+        )
+    else:
+        result["message"] = "No compliance gap detected. System appears clean."
+    
+    return result
 
 
 def generate_risk_report(findings: list[dict]) -> str:
