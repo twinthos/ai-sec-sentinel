@@ -10,7 +10,7 @@ Activate the virtual environment from the README, then run:
 python ai_sec_sentinel.py --dry-run --since-hours 24
 ```
 
-This fetches public feeds but does not send alerts or update deduplication state. It needs access to `cve.now`, `www.cisa.gov` and `api.first.org`. Optional OSV checks need `api.osv.dev`; optional RSS sources need their configured domains. A source failure is not a clean scan. News scanning is disabled in the sample configuration.
+This fetches public feeds but does not send alerts or update deduplication state. It needs access to `cve.now`, `www.cisa.gov` and `api.first.org`. Optional OSV checks need `api.osv.dev`; optional RSS sources need their configured domains. A source failure is not a clean scan. News scanning is enabled in the sample configuration. Partial news-feed outages still process available alerts, but exit nonzero, do not refresh successful-scan freshness, and mark CLI/dashboard health degraded. The Node.js source uses its official vulnerability RSS feed, not the HTML blog page.
 
 ## Configure delivery
 

@@ -40,7 +40,7 @@ def get_status():
         except (ValueError, TypeError):
             pass
     max_age = max(300, int(config.get("scan_interval_minutes", 60)) * 180)
-    healthy = age is not None and 0 <= age <= max_age
+    healthy = age is not None and 0 <= age <= max_age and state.get("last_scan_complete") is not False
     return {
         "status": "healthy" if healthy else "degraded",
         "version": str(config.get("version", "unknown")),
