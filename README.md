@@ -104,7 +104,7 @@ Not supported: comprehensive SCA, full SBOM assurance, ransomware prevention, vu
 
 ### Install / verify
 
-Requires Python 3.10+ and Internet access for live feed scans.
+Requires Python 3.11+ and Internet access for live feed scans.
 
 ```sh
 git clone https://github.com/twinthos/ai-sec-sentinel.git
@@ -114,7 +114,7 @@ python3 -m unittest discover -s tests -v
 python3 ai_sec_sentinel.py --dry-run --since-hours 24
 ```
 
-The dry run previews alert formatting and queries live feeds. The sample configuration disables optional RSS news monitoring until you explicitly set `news.enabled=true` in `sentinel_config.json`; it does not monitor X accounts or cloud infrastructure. Network errors should produce a nonzero status rather than a misleading clean result.
+The dry run previews alert formatting and queries live feeds. The sample configuration enables RSS news monitoring for the sources in `sentinel_config.json` (set `news.enabled=false` to disable it); it does not monitor X accounts or cloud infrastructure. Network errors should produce a nonzero status rather than a misleading clean result.
 
 ### Configure a live notification destination
 

@@ -41,7 +41,7 @@ class TestAlertQueue(unittest.TestCase):
         aid = alert_queue.enqueue("CVE-3", "telegram", {"title": "test"})
         alert_queue.mark_failed(aid, "telegram", "connection refused")
         pending = alert_queue.get_pending()
-        self.assertTrue(len(pending) > 0 or True)  # May be scheduled for future
+        self.assertEqual(pending, [])  # Backoff must prevent immediate redelivery.
     
     def test_survives_restart(self):
         import alert_queue
