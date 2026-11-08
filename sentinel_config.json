@@ -39,7 +39,7 @@
       "https://blog.talosintelligence.com/rss/",
       "https://krebsonsecurity.com/feed/",
       "https://nodejs.org/en/feed/vulnerability.xml",
-      "https://thehackernews.com/feeds/posts/default"
+      "https://www.securityweek.com/feed/"
     ]
   },
   "telegram": {
