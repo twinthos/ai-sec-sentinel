@@ -38,7 +38,7 @@
     "sources": [
       "https://www.bleepingcomputer.com/feed/",
       "https://krebsonsecurity.com/feed/",
-      "https://nodejs.org/en/blog/vulnerability/",
+      "https://nodejs.org/en/feed/vulnerability.xml",
       "https://www.cisa.gov/news-events/cybersecurity-advisories/rss.xml"
     ]
   },

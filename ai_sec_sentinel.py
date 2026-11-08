@@ -1079,6 +1079,8 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
         "ai_related": len(ai_entries),
         "supplier_related": len(supplier_entries),
         "news_alerts": len(news_alerts),
+        "news_sources_checked": getattr(news_alerts, "checked_sources", 0),
+        "news_sources_failed": getattr(news_alerts, "failed_sources", 0),
         "alerts_sent": alerts_sent,
         "cisa_kev_hits": sum(1 for e in ai_entries if e.get("id", "").split("#")[0].strip() in kev_ids),
         "high_epss": sum(1 for cid, score in epss_scores.items() if score >= 0.7),
@@ -1221,11 +1223,15 @@ def run_scan(config: dict, token: str = "", chat: str = "") -> int:
 
     if not dry_run:
         state["seen"] = sorted(seen)[-500:]
-        state["last_successful_run"] = datetime.now(timezone.utc).isoformat()
+        state["last_scan_complete"] = stats["news_sources_failed"] == 0
+        if state["last_scan_complete"]:
+            state["last_successful_run"] = datetime.now(timezone.utc).isoformat()
         state["last_scan_stats"] = stats
         save_state(state)
     else:
         print("[DRY-RUN] No notifications delivered and no alert state was changed.")
+    if stats["news_sources_failed"]:
+        raise RuntimeError(f"Incomplete news coverage: {stats['news_sources_failed']} of {stats['news_sources_checked']} feeds unavailable; available alerts were processed")
     return alerts_sent
 
 
@@ -1299,6 +1305,9 @@ def main():
     if args.health:
         from datetime import datetime as _dt, timezone as _tz
         state = load_state()
+        if state.get("last_scan_complete") is False:
+            print("UNHEALTHY: latest scan had incomplete source coverage")
+            return 2
         stamp = state.get("last_successful_run")
         if not stamp:
             print("UNHEALTHY: no successful live scan recorded")
