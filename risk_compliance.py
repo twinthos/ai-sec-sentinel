@@ -10,7 +10,9 @@ Adds:
 import json
 from pathlib import Path
 
-# OWASP LLM Top 10 (2025) mapping
+# Legacy OWASP LLM category labels (pre-2025). Compatibility/reference only:
+# NOT the current 2025 or 2026 OWASP LLM Top 10, and not a compliance assessment.
+# See https://genai.owasp.org/resource/owasp-genai-llm-top-10-2026/
 OWASP_LLM_TOP10 = {
     "LLM01": "Prompt Injection",
     "LLM02": "Insecure Output Handling",
@@ -34,26 +36,20 @@ ZERO_TRUST_NOTE = (
     "Every interaction requires authentication. Treat 'internet-facing' as 'attack-facing'."
 )
 
-# AI security is a new field. Companies are willing to pay because the threat is real
-# and the supply of qualified AI security expertise is near zero.
-# This is not a "nice to have" - it is a board-level risk item after McKinsey, Hugging Face,
-# and the Mexican government breaches. The market is willing to pay because the cost of
-# NOT having AI security monitoring is a £500,000+ breach.
+# Financial impact varies by system, incident and business. Do not infer sales
+# demand, a breach cost or the quality of a deployment from this reference tool.
 AI_SECURITY_MARKET_NOTE = (
-    "AI security is a new field with near-zero supply of qualified expertise. "
-    "Companies are willing to pay because the threat is real and immediate. "
-    "After McKinsey, Hugging Face, and the Mexican government breaches, "
-    "AI security monitoring is a board-level risk item, not a 'nice to have'. "
-    "The cost of not having it is a £500,000+ breach. "
-    "The market pays because the alternative is catastrophic."
+    "Agent security is a deployment-specific engineering and governance concern. "
+    "Assess exposure, business impact and the available evidence for each system. "
+    "This project does not estimate breach costs, commercial demand or loss avoided."
 )
 
-# Compliance is a baseline, not a guarantee. The sentinel detects real vulnerabilities,
-# not just checkbox compliance. Treat compliance as the floor, not the ceiling.
+# Compliance statements need evidence. These functions classify caller-supplied findings;
+# they do not independently detect an exploitable vulnerability or certify compliance.
 COMPLIANCE_GAP_NOTE = (
-    "Compliance (SOC2, PCI, ISO27001) is a baseline, not a guarantee. "
-    "Companies get hacked while compliant. The sentinel detects real vulnerabilities, "
-    "not just checkbox compliance. Treat compliance as the floor, not the ceiling."
+    "A certificate is not proof that a system has no vulnerabilities. "
+    "This heuristic reviews supplied findings and named certifications; "
+    "it does not test the asset or verify any certification."
 )
 
 # DEFENSIVE ONLY. Sentinel does NOT provide, install, run, or recommend these tools.
@@ -103,7 +99,7 @@ AI_ATTACK_TOOL_NOTE = (
     "These tools automate vulnerability discovery, penetration testing, and red teaming using LLMs. "
     "This module lists static examples for defensive awareness, not a live threat feed. "
     "Sentinel does NOT provide, install, run, or recommend these tools. "
-    "Sentinel only detects their signatures and patterns. "
+    "This catalogue does not detect their signatures or runtime behaviour. "
     "Using these tools without authorization is illegal."
 )
 
@@ -399,11 +395,10 @@ def map_to_compliance(finding: dict) -> list[str]:
 
 
 def check_compliance_gap(findings: list[dict], compliance_certs: list[str] = None) -> dict:
-    """Check for compliance gaps: systems that are compliant on paper but have real vulnerabilities.
-    
-    From @ekryski insight: SOC2/PCI compliant companies still get hacked.
-    Compliance is a baseline, not a guarantee. This function flags when a system
-    has compliance certifications but also has actual exploitable vulnerabilities.
+    """Flag high/critical supplied findings alongside claimed certifications.
+
+    Does not verify a certificate, independently discover vulnerabilities or
+    establish exploitability. No finding is NOT evidence of a clean system.
     """
     if compliance_certs is None:
         compliance_certs = []
@@ -433,7 +428,7 @@ def check_compliance_gap(findings: list[dict], compliance_certs: list[str] = Non
             "Consider compliance framework adoption as a baseline."
         )
     else:
-        result["message"] = "No compliance gap detected. System appears clean."
+        result["message"] = "No high/critical mismatch in the supplied list; the system has NOT been independently verified as clean."
     
     return result
 
