@@ -2,7 +2,7 @@
   "version": "1.4.1",
   "scan_interval_minutes": 60,
   "alert_min_severity": 0,
-  "auto_remediate": true,
+  "auto_remediate": false,
   "allow_lockfile_upload": false,
   "learn_from_actions": true,
   "suppliers": [
