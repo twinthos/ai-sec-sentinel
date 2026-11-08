@@ -90,19 +90,19 @@ python3 -m unittest discover -s tests -v
 
 The suite includes authorized/unauthorized calls, ledger integrity, sensitive-content redaction, symlink traversal, delivery retries and dry-run state. CI uses synthetic fixtures; it does not constitute independent penetration testing.
 
-### AI attack tool awareness (defensive)
+### AI attack tool awareness (defensive reference)
 
-**DEFENSIVE ONLY.** Sentinel does NOT provide, install, run, or recommend these tools. They are listed for THREAT AWARENESS - so defenders know what attackers might use. Sentinel only detects their signatures and patterns. Using these tools without authorization is illegal.
+`risk_compliance.py` contains a **static catalogue of 17 named AI-assisted security tools** for defensive awareness. The names are examples to assess and maintain, not a continuously updated threat-intelligence feed.
 
-Sentinel tracks 17 known AI-powered offensive security tools (HexStrike AI, PentestGPT, Strix, Shannon, and others) as emerging threat intelligence. These tools automate vulnerability discovery, penetration testing, and red teaming using LLMs.
+The function `check_ai_attack_tool_awareness(services)` looks at **service metadata provided by the caller** and reports which entries are marked `internet_facing` or lack authentication. It does **not** probe the network, identify an attacker or an attack tool, analyse packet signatures, or detect actual tool executions.
 
-- **Defensive only.** Sentinel does not run offensive tools. It detects the signatures and patterns these tools leave behind.
-- **Attack surface check.** `check_ai_attack_tool_awareness()` flags internet-facing services and unauthenticated endpoints that AI-powered attack tools would target first.
-- **Zero-trust integration.** Exposed services are flagged with zero-trust recommendations: every service must require authentication.
-- **Threat intelligence.** The `AI_ATTACK_TOOLS` list is updated as new tools emerge. Source: @fr0gger_ (Thomas Roccia) AI security tools compilation.
-- **Legal warning.** Using these tools without authorization is illegal (Computer Misuse Act 1990, CFAA, etc.). Sentinel lists them for awareness only.
+- Treat the output as a **checklist of exposure assumptions**, not live telemetry or an assurance result.
+- Verify externally whether a listed product exists, remains maintained or is relevant to your environment.
+- Use actual authorised network inventories, access checks and security logs to establish exposure and activity.
+- The reference list does not provide, install, execute or operate the named offensive tools.
 
-This is awareness, not prevention. Sentinel tells you what tools attackers might use and whether your attack surface is exposed. It does not block or prevent attacks. Sentinel NEVER runs offensive tools.
+The scope matters: a reported **HIGH** status from caller-supplied metadata is a signal to investigate, not proof an AI attack was detected.
+
 
 ## Core principle
 
