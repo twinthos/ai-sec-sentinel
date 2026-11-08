@@ -90,6 +90,17 @@ python3 -m unittest discover -s tests -v
 
 The suite includes authorized/unauthorized calls, ledger integrity, sensitive-content redaction, symlink traversal, delivery retries and dry-run state. CI uses synthetic fixtures; it does not constitute independent penetration testing.
 
+### AI attack tool awareness (defensive)
+
+Sentinel tracks 17 known AI-powered offensive security tools (HexStrike AI, PentestGPT, Strix, Shannon, and others) as emerging threat intelligence. These tools automate vulnerability discovery, penetration testing, and red teaming using LLMs.
+
+- **Defensive only.** Sentinel does not run offensive tools. It detects the signatures and patterns these tools leave behind.
+- **Attack surface check.** `check_ai_attack_tool_awareness()` flags internet-facing services and unauthenticated endpoints that AI-powered attack tools would target first.
+- **Zero-trust integration.** Exposed services are flagged with zero-trust recommendations: every service must require authentication.
+- **Threat intelligence.** The `AI_ATTACK_TOOLS` list is updated as new tools emerge. Source: @fr0gger_ (Thomas Roccia) AI security tools compilation.
+
+This is awareness, not prevention. Sentinel tells you what tools attackers might use and whether your attack surface is exposed. It does not block or prevent attacks.
+
 ## Threat monitor — what actually works
 
 - Pulls a primary CVE feed and enriches findings with CISA KEV and FIRST EPSS when those sources are available.
