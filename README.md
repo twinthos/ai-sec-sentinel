@@ -104,6 +104,14 @@ Sentinel tracks 17 known AI-powered offensive security tools (HexStrike AI, Pent
 
 This is awareness, not prevention. Sentinel tells you what tools attackers might use and whether your attack surface is exposed. It does not block or prevent attacks. Sentinel NEVER runs offensive tools.
 
+## Core principle
+
+**Twinthos Sentinel exists for the benefit of humanity.**
+
+Security is not about attack. It is about protection. This tool must NEVER be used for negative purposes. It protects people, systems, and data from harm. Every feature, every check, every alert serves one purpose: keeping humans safe in a world where AI is becoming powerful.
+
+If a feature cannot be used for good, it does not belong here.
+
 ## Threat monitor — what actually works
 
 - Pulls a primary CVE feed and enriches findings with CISA KEV and FIRST EPSS when those sources are available.

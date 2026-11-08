@@ -221,6 +221,22 @@ def check_email_security(domain: str) -> dict:
 
     return result
 
+# Core principle: Twinthos Sentinel exists for the benefit of humanity.
+# Security is not about attack. It is about protection.
+# This tool must NEVER be used for negative purposes.
+# It protects people, systems, and data from harm.
+# Every feature, every check, every alert serves one purpose:
+# keeping humans safe in a world where AI is becoming powerful.
+HUMANITY_PRINCIPLE = (
+    "Twinthos Sentinel exists for the benefit of humanity. "
+    "Security is not about attack. It is about protection. "
+    "This tool must NEVER be used for negative purposes. "
+    "It protects people, systems, and data from harm. "
+    "Every feature, every check, every alert serves one purpose: "
+    "keeping humans safe in a world where AI is becoming powerful. "
+    "If a feature cannot be used for good, it does not belong here."
+)
+
 # Compliance framework mapping
 COMPLIANCE_FRAMEWORKS = {
     "eu_ai_act": {
