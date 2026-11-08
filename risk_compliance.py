@@ -56,44 +56,63 @@ COMPLIANCE_GAP_NOTE = (
     "not just checkbox compliance. Treat compliance as the floor, not the ceiling."
 )
 
+# DEFENSIVE ONLY. Sentinel does NOT provide, install, run, or recommend these tools.
+# These tools are listed for THREAT AWARENESS only - so defenders know what attackers
+# might use. Sentinel's role is purely defensive: detection, monitoring, and hardening.
+# Using these tools against systems you do not own or have written authorization for
+# is illegal in most jurisdictions (Computer Misuse Act 1990, CFAA, etc.).
+# Sentinel NEVER runs offensive tools. Sentinel only detects their signatures.
+DEFENSIVE_ONLY_WARNING = (
+    "DEFENSIVE ONLY. Sentinel does NOT provide, install, run, or recommend these tools. "
+    "These tools are listed for THREAT AWARENESS - so defenders know what attackers might use. "
+    "Sentinel's role is purely defensive: detection, monitoring, and hardening. "
+    "Using these tools against systems you do not own or have written authorization for "
+    "is illegal. Sentinel NEVER runs offensive tools. Sentinel only detects their signatures."
+)
+
 # AI-powered offensive security tools are becoming mainstream. These tools automate
 # vulnerability discovery, penetration testing, and red teaming using LLMs.
 # Sentinel tracks these as emerging threat intelligence - knowing what tools
 # attackers might use helps defenders prepare. This is defensive awareness only.
 # Source: @fr0gger_ (Thomas Roccia) AI security tools compilation, 2026.
+# LEGAL WARNING: Using these tools without authorization is illegal.
+# Sentinel lists them for awareness only. Sentinel does not provide or run them.
 AI_ATTACK_TOOLS = [
-    {"name": "HexStrike AI", "type": "AI pentesting", "risk": "Automated vulnerability exploitation"},
-    {"name": "PentestGPT", "type": "AI pentesting", "risk": "LLM-driven penetration testing"},
-    {"name": "PentestAgent", "type": "AI pentesting", "risk": "Autonomous security assessment"},
-    {"name": "Strix", "type": "AI red team", "risk": "Automated red team operations"},
-    {"name": "Shannon", "type": "AI red team", "risk": "AI-driven attack simulation"},
-    {"name": "AutoPentester", "type": "AI pentesting", "risk": "Automated penetration testing"},
-    {"name": "VulnBot", "type": "AI vulnerability scanner", "risk": "Automated vulnerability discovery"},
-    {"name": "RedAmon", "type": "AI red team", "risk": "AI-powered red team automation"},
-    {"name": "MAPTA", "type": "AI security testing", "risk": "AI model attack testing"},
-    {"name": "BugTraceAI", "type": "AI bug hunting", "risk": "Automated bug discovery via AI"},
-    {"name": "Nebula", "type": "AI security testing", "risk": "AI-driven security assessment"},
-    {"name": "hackingBuddyGPT", "type": "AI hacking assistant", "risk": "LLM-assisted exploitation"},
-    {"name": "CyberStrike", "type": "AI cyber operations", "risk": "AI-powered cyber attack automation"},
-    {"name": "CyberStrikeAI", "type": "AI cyber operations", "risk": "AI-driven attack orchestration"},
-    {"name": "PentAGI", "type": "AI pentesting", "risk": "Autonomous penetration testing agent"},
-    {"name": "Cairn", "type": "AI security tool", "risk": "AI-assisted security operations"},
-    {"name": "CAI", "type": "AI security framework", "risk": "Cybersecurity AI framework (archived)"},
+    {"name": "HexStrike AI", "type": "AI pentesting", "risk": "Automated vulnerability exploitation", "defensive_only": True},
+    {"name": "PentestGPT", "type": "AI pentesting", "risk": "LLM-driven penetration testing", "defensive_only": True},
+    {"name": "PentestAgent", "type": "AI pentesting", "risk": "Autonomous security assessment", "defensive_only": True},
+    {"name": "Strix", "type": "AI red team", "risk": "Automated red team operations", "defensive_only": True},
+    {"name": "Shannon", "type": "AI red team", "risk": "AI-driven attack simulation", "defensive_only": True},
+    {"name": "AutoPentester", "type": "AI pentesting", "risk": "Automated penetration testing", "defensive_only": True},
+    {"name": "VulnBot", "type": "AI vulnerability scanner", "risk": "Automated vulnerability discovery", "defensive_only": True},
+    {"name": "RedAmon", "type": "AI red team", "risk": "AI-powered red team automation", "defensive_only": True},
+    {"name": "MAPTA", "type": "AI security testing", "risk": "AI model attack testing", "defensive_only": True},
+    {"name": "BugTraceAI", "type": "AI bug hunting", "risk": "Automated bug discovery via AI", "defensive_only": True},
+    {"name": "Nebula", "type": "AI security testing", "risk": "AI-driven security assessment", "defensive_only": True},
+    {"name": "hackingBuddyGPT", "type": "AI hacking assistant", "risk": "LLM-assisted exploitation", "defensive_only": True},
+    {"name": "CyberStrike", "type": "AI cyber operations", "risk": "AI-powered cyber attack automation", "defensive_only": True},
+    {"name": "CyberStrikeAI", "type": "AI cyber operations", "risk": "AI-driven attack orchestration", "defensive_only": True},
+    {"name": "PentAGI", "type": "AI pentesting", "risk": "Autonomous penetration testing agent", "defensive_only": True},
+    {"name": "Cairn", "type": "AI security tool", "risk": "AI-assisted security operations", "defensive_only": True},
+    {"name": "CAI", "type": "AI security framework", "risk": "Cybersecurity AI framework (archived)", "defensive_only": True},
 ]
 
 AI_ATTACK_TOOL_NOTE = (
+    "DEFENSIVE AWARENESS ONLY. "
     "AI-powered offensive security tools are becoming mainstream. "
     "These tools automate vulnerability discovery, penetration testing, and red teaming using LLMs. "
     "Sentinel tracks these as emerging threat intelligence - defenders must know what tools attackers might use. "
-    "This is defensive awareness only. Sentinel does not run offensive tools. "
-    "Sentinel detects the signatures and patterns these tools leave behind."
+    "Sentinel does NOT provide, install, run, or recommend these tools. "
+    "Sentinel only detects their signatures and patterns. "
+    "Using these tools without authorization is illegal."
 )
 
 def check_ai_attack_tool_awareness(services: list[dict] = None) -> dict:
     """Check if organization is prepared for AI-powered attacks.
 
-    Returns awareness status and recommendations. Defensive only.
-"""
+    DEFENSIVE ONLY. Returns awareness status and recommendations.
+    Sentinel does NOT run offensive tools. Sentinel detects their signatures.
+    """
     if services is None:
         services = []
 
@@ -102,6 +121,8 @@ def check_ai_attack_tool_awareness(services: list[dict] = None) -> dict:
     unauthenticated = [s for s in exposed if not s.get("authenticated", True)]
 
     result = {
+        "defensive_only": True,
+        "warning": DEFENSIVE_ONLY_WARNING,
         "ai_attack_tools_tracked": len(AI_ATTACK_TOOLS),
         "tools": [t["name"] for t in AI_ATTACK_TOOLS],
         "exposed_services": len(exposed),
@@ -128,6 +149,11 @@ def check_ai_attack_tool_awareness(services: list[dict] = None) -> dict:
     result["recommendations"].append(
         "Sentinel tracks " + str(len(AI_ATTACK_TOOLS)) + " known AI attack tools as emerging threats. "
         "Update threat intelligence feeds regularly to catch new tools."
+    )
+    result["recommendations"].append(
+        "DEFENSIVE ONLY: Sentinel does not provide, install, or run these tools. "
+        "Sentinel only detects their signatures. "
+        "Using these tools without authorization is illegal."
     )
 
     return result

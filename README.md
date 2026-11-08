@@ -92,14 +92,17 @@ The suite includes authorized/unauthorized calls, ledger integrity, sensitive-co
 
 ### AI attack tool awareness (defensive)
 
+**DEFENSIVE ONLY.** Sentinel does NOT provide, install, run, or recommend these tools. They are listed for THREAT AWARENESS - so defenders know what attackers might use. Sentinel only detects their signatures and patterns. Using these tools without authorization is illegal.
+
 Sentinel tracks 17 known AI-powered offensive security tools (HexStrike AI, PentestGPT, Strix, Shannon, and others) as emerging threat intelligence. These tools automate vulnerability discovery, penetration testing, and red teaming using LLMs.
 
 - **Defensive only.** Sentinel does not run offensive tools. It detects the signatures and patterns these tools leave behind.
 - **Attack surface check.** `check_ai_attack_tool_awareness()` flags internet-facing services and unauthenticated endpoints that AI-powered attack tools would target first.
 - **Zero-trust integration.** Exposed services are flagged with zero-trust recommendations: every service must require authentication.
 - **Threat intelligence.** The `AI_ATTACK_TOOLS` list is updated as new tools emerge. Source: @fr0gger_ (Thomas Roccia) AI security tools compilation.
+- **Legal warning.** Using these tools without authorization is illegal (Computer Misuse Act 1990, CFAA, etc.). Sentinel lists them for awareness only.
 
-This is awareness, not prevention. Sentinel tells you what tools attackers might use and whether your attack surface is exposed. It does not block or prevent attacks.
+This is awareness, not prevention. Sentinel tells you what tools attackers might use and whether your attack surface is exposed. It does not block or prevent attacks. Sentinel NEVER runs offensive tools.
 
 ## Threat monitor — what actually works
 
