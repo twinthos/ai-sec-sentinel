@@ -28,6 +28,7 @@ import re
 import signal
 import sys
 import time
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -1280,6 +1281,9 @@ def main():
         print("This proves only the included scoped MCP tool, not another agent runtime.")
         return 0
 
+    if args.interval <= 0:
+        parser.error("--interval must be a positive number of minutes")
+
     # Load config
     config = load_config()
     if args.feed_limit:
@@ -1544,21 +1548,21 @@ def main():
 
     if args.daemon:
         # Graceful shutdown handler
-        _shutdown = {"flag": False}
+        _shutdown = threading.Event()
         def _sig_handler(signum, frame):
             print(f"\nReceived signal {signum}, saving state and shutting down...")
-            _shutdown["flag"] = True
+            _shutdown.set()
         signal.signal(signal.SIGTERM, _sig_handler)
         signal.signal(signal.SIGINT, _sig_handler)
 
         print(f"Starting daemon mode — scanning every {args.interval} minutes...")
-        while not _shutdown["flag"]:
+        while not _shutdown.is_set():
             try:
                 run_scan(config, token, chat)
             except Exception as e:
                 print(f"Scan error: {e}", file=sys.stderr)
-            if not _shutdown["flag"]:
-                time.sleep(args.interval * 60)
+            # Event.wait wakes immediately on SIGTERM/SIGINT during the idle period.
+            _shutdown.wait(args.interval * 60)
         print("Daemon stopped gracefully.")
     else:
         try:

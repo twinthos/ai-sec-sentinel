@@ -102,10 +102,11 @@ def get_pending(limit: int = 50) -> list:
     rows = conn.execute("""
         SELECT * FROM alerts
         WHERE state IN ('discovered', 'pending', 'failed')
+        AND retry_count < ?
         AND (next_retry IS NULL OR next_retry <= ?)
         ORDER BY priority DESC, created_at ASC
         LIMIT ?
-    """, (now, limit)).fetchall()
+    """, (MAX_RETRIES, now, limit)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -139,7 +140,7 @@ def mark_failed(alert_id: str, channel: str, error: str):
 
     if retry_count >= MAX_RETRIES:
         # Move to failed permanently
-        conn.execute("UPDATE alerts SET state='failed', retry_count=?, error=?, updated_at=? WHERE id=?",
+        conn.execute("UPDATE alerts SET state='failed', retry_count=?, next_retry=NULL, error=?, updated_at=? WHERE id=?",
                      (retry_count, error, now, alert_id))
     else:
         # Schedule retry with backoff + jitter
