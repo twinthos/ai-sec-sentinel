@@ -343,6 +343,10 @@ def fetch_feed(limit: int = 100) -> list[dict]:
 
 
 def fetch_entry(cve_id: str) -> dict | None:
+    # Validate CVE ID format to prevent injection/SSRF
+    if not re.match(r'^CVE-\d{4}-\d{4,}$', cve_id.strip().upper()):
+        return None
+    cve_id = cve_id.strip().upper()
     def _do():
         r = requests.get(f"{CVE_NOW_API}/{cve_id}", timeout=15)
         if r.status_code == 200:
@@ -355,12 +359,14 @@ def fetch_entry(cve_id: str) -> dict | None:
             return data
         return None
     try:
+        time.sleep(0.5)  # Rate limit
         return _retry(_do)
     except Exception:
         return None
 
 
 def fetch_cisa_kev() -> dict:
+    time.sleep(1)  # Rate limit
     def _do():
         r = requests.get(CISA_KEV_URL, timeout=30)
         r.raise_for_status()
@@ -375,6 +381,7 @@ def fetch_cisa_kev() -> dict:
 
 
 def fetch_epss_scores(cve_ids: list[str]) -> dict:
+    time.sleep(1)  # Rate limit
     scores = {}
     if not cve_ids:
         return scores

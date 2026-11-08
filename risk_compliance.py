@@ -34,6 +34,20 @@ ZERO_TRUST_NOTE = (
     "Every interaction requires authentication. Treat 'internet-facing' as 'attack-facing'."
 )
 
+# AI security is a new field. Companies are willing to pay because the threat is real
+# and the supply of qualified AI security expertise is near zero.
+# This is not a "nice to have" - it is a board-level risk item after McKinsey, Hugging Face,
+# and the Mexican government breaches. The market is willing to pay because the cost of
+# NOT having AI security monitoring is a £500,000+ breach.
+AI_SECURITY_MARKET_NOTE = (
+    "AI security is a new field with near-zero supply of qualified expertise. "
+    "Companies are willing to pay because the threat is real and immediate. "
+    "After McKinsey, Hugging Face, and the Mexican government breaches, "
+    "AI security monitoring is a board-level risk item, not a 'nice to have'. "
+    "The cost of not having it is a £500,000+ breach. "
+    "The market pays because the alternative is catastrophic."
+)
+
 # Compliance is a baseline, not a guarantee. The sentinel detects real vulnerabilities,
 # not just checkbox compliance. Treat compliance as the floor, not the ceiling.
 COMPLIANCE_GAP_NOTE = (
