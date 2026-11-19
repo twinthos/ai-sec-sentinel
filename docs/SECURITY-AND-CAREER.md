@@ -13,6 +13,7 @@ Useful current frameworks: [OWASP AI Agent Security Cheat Sheet](https://cheatsh
 Requires Python 3.11+ and a POSIX/Linux system for the descriptor-based file security example.
 
 ```sh
+pip install -r requirements.txt
 python3 reference_adapter.py --demo
 python3 -m unittest discover -s tests -v
 ```
