@@ -164,13 +164,15 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", args.agent_id):
         parser.error("Invalid trusted agent ID")
+    # Check the caller-supplied paths before resolve(): resolve() follows a
+    # symlink, so checking is_symlink() on the resolved target cannot detect it.
+    if args.policy.is_symlink() or args.ledger.is_symlink():
+        parser.error("Policy and ledger may not be symlinks")
     root = args.workspace.resolve(strict=True)
     policy = args.policy.resolve(strict=True)
     ledger = args.ledger.resolve(strict=False)
     if root == policy or root in policy.parents or root == ledger or root in ledger.parents:
         parser.error("Policy and ledger must be outside the readable workspace")
-    if policy.is_symlink() or ledger.is_symlink():
-        parser.error("Policy and ledger may not be symlinks")
     workspace = GuardedWorkspace(root, policy, ledger, args.agent_id, allowed_tools=("file_read",))
     serve(ReferenceMCP(workspace))
 

@@ -186,5 +186,33 @@ class MCPReadOnlyTests(unittest.TestCase):
         self.assertTrue(safe_relative_path("reports/public_note.md"))
 
 
+    def test_stdio_cli_rejects_symlinked_policy_and_ledger_paths(self):
+        script = Path(__file__).resolve().parent.parent / "mcp_reference_server.py"
+        policy_link = self.base / "policy-link.json"
+        policy_link.symlink_to(self.policy)
+        ledger_target = self.base / "ledger-target.jsonl"
+        ledger_target.write_text("", encoding="utf-8")
+        ledger_link = self.base / "ledger-link.jsonl"
+        ledger_link.symlink_to(ledger_target)
+
+        common = [
+            sys.executable, str(script),
+            "--workspace", str(self.workspace),
+            "--agent-id", "demo-agent",
+        ]
+        cases = (
+            ("--policy", str(policy_link), "--ledger", str(self.base / "normal-ledger.jsonl")),
+            ("--policy", str(self.policy), "--ledger", str(ledger_link)),
+        )
+        for case in cases:
+            with self.subTest(link=case[1] if case[0] == "--policy" else case[3]):
+                result = subprocess.run(
+                    common + list(case), capture_output=True, text=True, timeout=8
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Policy and ledger may not be symlinks", result.stderr)
+
+
+
 if __name__ == "__main__":
     unittest.main()
