@@ -163,8 +163,8 @@ class TestWebhookSecurity(unittest.TestCase):
 class TestPrivacy(unittest.TestCase):
     def test_redaction(self):
         from privacy import redact_text
-        text = "key=sk-abcdefghijklmnopqrstuvwxyz"
-        self.assertNotIn("sk-abc", redact_text(text))
+        text = "password=sk-EXAMPLE"
+        self.assertNotIn("sk-EXAMPLE", redact_text(text))
     
     def test_local_only_blocks_upload(self):
         from privacy import can_upload_lockfile

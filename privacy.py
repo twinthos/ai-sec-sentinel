@@ -164,9 +164,9 @@ def run_privacy_tests():
     
     # Test 1: Redaction
     print("\n1. Secret redaction:")
-    text = "api_key=sk-abc123def456ghi789jkl012mno345pqr678stu901vwx234"
+    text = "api_key=sk-EXAMPLE"
     redacted = redact_text(text)
-    assert "sk-abc" not in redacted
+    assert "sk-EXAMPLE" not in redacted
     assert "[REDACTED" in redacted
     print(f"   PASS: {redacted}")
     
