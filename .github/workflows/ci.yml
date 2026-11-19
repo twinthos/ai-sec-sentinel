@@ -49,7 +49,7 @@ jobs:
           python3 defensive_event_triage.py --input examples/fixtures/synthetic_cloud_events.jsonl > sentinel-triage.json
           python3 -c "import json; d=json.load(open('sentinel-triage.json')); assert len(d['signals']) >= 2 and not d['source_identifiers_included']"
       - name: Publish synthetic evidence artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sentinel-synthetic-evidence-${{ matrix.python }}
           path: |
