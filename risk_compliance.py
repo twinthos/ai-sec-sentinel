@@ -495,9 +495,9 @@ GITHUB_ACTION_YML = """name: Twinthos Sentinel Scan
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
   schedule:
     - cron: '0 6 * * *'  # Daily at 6am UTC
 
