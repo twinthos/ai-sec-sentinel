@@ -9,6 +9,7 @@ Adds:
 
 import json
 from pathlib import Path
+from typing import Optional
 
 # Legacy OWASP LLM category labels (pre-2025). Compatibility/reference only:
 # NOT the current 2025 or 2026 OWASP LLM Top 10, and not a compliance assessment.
@@ -154,6 +155,156 @@ def check_ai_attack_tool_awareness(services: list[dict] = None) -> dict:
         "Using these tools without authorization is illegal."
     )
 
+    return result
+
+
+# Agentic attack frameworks — from the @AISecHub insight (Nov 2026) pointing to
+# ThreatDefence/agentic-attack-detections. DEFENSIVE AWARENESS ONLY. These are tools
+# attackers misuse; Sentinel does not provide, run or recommend them, and this module
+# does not inspect attack signatures. It classifies caller-supplied telemetry against
+# shared behaviours, because one shared-behaviour rule covers every framework.
+AGENTIC_ATTACK_NOTE = (
+    "Agentic attack frameworks hand an intrusion to AI agents that plan and run real "
+    "attack tools until they reach a goal. Framework names change faster than behaviour: "
+    "detect the shared patterns (auto-approved agent CLIs, model API calls from servers, "
+    "page-readers beside attack traffic, rotating-proxy probes, out-of-band test domains). "
+    "This is a lead, not a verdict, and these experimental rules are untested until run "
+    "against your own telemetry."
+)
+
+AGENTIC_FRAMEWORKS = [
+    "ARTEX", "AntiFox", "Cairn", "PentAGI", "HexStrike",
+    "CyberStrikeAI", "Strix", "Hermes Agent", "Agent Zero",
+]
+
+AGENTIC_SHARED_BEHAVIORS = {
+    "auto_approved_agent_cli": {
+        "description": "AI agent CLI in auto-approve mode starting attack tools",
+        "severity": "HIGH",
+        "keywords": ["auto-approve", "auto approve", "autoapprove", "approval prompts off", "yolo mode", "dangerously-skip-permissions"],
+        "recommendation": "Require human approval at the action layer, not only input filtering. Log every agent-to-tool call.",
+    },
+    "server_calling_model_api": {
+        "description": "Server calling an AI model API or gateway from production infrastructure",
+        "severity": "MEDIUM",
+        "keywords": ["deepseek", "qwen", "glm", "kimi", "minimax", "doubao", "openrouter", "model api"],
+        "recommendation": "Baseline expected model endpoints. Alert on new or unexpected model API destinations from servers.",
+    },
+    "page_reader_next_to_attack_traffic": {
+        "description": "AI page reader active on your application alongside attack traffic from the same address",
+        "severity": "HIGH",
+        "keywords": ["page reader", "browser agent", "headless browser", "web fetcher", "agent user agent"],
+        "recommendation": "Correlate agent user agents with malicious requests from the same source; rate-limit and challenge.",
+    },
+    "rotating_proxy_probe": {
+        "description": "One site probed through many rotating proxy addresses",
+        "severity": "HIGH",
+        "keywords": ["rotating proxy", "proxy rotation", "residential proxy", "hundreds of addresses"],
+        "recommendation": "Detect single-target probing spread across many sources; use behaviour, not per-IP blocks.",
+    },
+    "oob_test_domain": {
+        "description": "Server looking up out-of-band testing domains (interactsh, Burp Collaborator, dnslog)",
+        "severity": "HIGH",
+        "keywords": ["interactsh", "oast.", "burp collaborator", "dnslog.cn", "out-of-band domain"],
+        "recommendation": "Treat outbound lookups to OOB domains as evidence a blind injection, SSRF or XXE payload ran.",
+    },
+    "callback_to_prober": {
+        "description": "Server calling back to the address that was probing it",
+        "severity": "HIGH",
+        "keywords": ["callback to prober", "callback to scanner", "reverse shell", "worker port", "28000", "29999"],
+        "recommendation": "Block and alert on outbound connections to recent inbound probers, including high worker-port ranges.",
+    },
+    "config_or_backup_theft": {
+        "description": "Configuration and backup file theft, or probes of WSUS administration services",
+        "severity": "HIGH",
+        "keywords": ["web.config", ".env", "backup file", "wsus", "configuration file download"],
+        "recommendation": "Alert on bulk reads of config/backup files and any WSUS administration probing.",
+    },
+    "machine_speed_credential_use": {
+        "description": "Cloud credentials used at machine speed: many identities, bulk reads, role keys off-instance",
+        "severity": "HIGH",
+        "keywords": ["machine speed", "bulk user data", "instance role", "credential stuffing", "many identities"],
+        "recommendation": "Flag impossible-speed identity checks and instance-role keys used from outside the expected host.",
+    },
+}
+
+
+def check_agentic_attack_patterns(events: Optional[list[dict]] = None) -> dict:
+    """Classify caller-supplied telemetry against shared agentic-attack behaviours.
+
+    DEFENSIVE ONLY. Sentinel does not run offensive tools and this function does
+    not inspect attack signatures or framework binaries. It looks for shared
+    behaviour descriptions in telemetry the caller supplies. A match is a lead
+    for a human to investigate, never proof of compromise.
+    """
+    if events is None:
+        events = []
+
+    matched = []
+    severity_rank = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+    top_severity = "LOW"
+
+    for index, event in enumerate(events):
+        haystack = json.dumps(event, default=str).lower()
+        explicit = str(event.get("behavior", "")).lower() if isinstance(event, dict) else ""
+        for key, rule in AGENTIC_SHARED_BEHAVIORS.items():
+            hit = key in explicit or any(kw in haystack for kw in rule["keywords"])
+            if not hit:
+                continue
+            matched.append({
+                "behavior": key,
+                "severity": rule["severity"],
+                "description": rule["description"],
+                "event_index": index,
+                "recommendation": rule["recommendation"],
+            })
+            if severity_rank[rule["severity"]] > severity_rank[top_severity]:
+                top_severity = rule["severity"]
+
+    # Keep one entry per behaviour, preserving the first (earliest) event.
+    seen = set()
+    unique = []
+    for m in matched:
+        if m["behavior"] not in seen:
+            seen.add(m["behavior"])
+            unique.append(m)
+
+    risk = "HIGH" if top_severity in ("HIGH", "CRITICAL") else ("MEDIUM" if top_severity == "MEDIUM" else "LOW")
+    result = {
+        "defensive_only": True,
+        "warning": DEFENSIVE_ONLY_WARNING,
+        "note": AGENTIC_ATTACK_NOTE,
+        "input_type": "caller_supplied_telemetry",
+        "events_reviewed": len(events),
+        "frameworks_tracked": len(AGENTIC_FRAMEWORKS),
+        "automatic_signature_detection": False,
+        "rules_untested_against_real_intrusions": True,
+        "matched_behaviors": unique,
+        "risk": risk,
+        "message": "",
+        "recommendations": [],
+    }
+
+    if unique:
+        names = ", ".join(m["behavior"] for m in unique)
+        result["message"] = (
+            f"AGENTIC BEHAVIOUR LEAD: {len(unique)} shared pattern(s) in supplied "
+            f"telemetry: {names}. A match is a lead, not a verdict. Investigate with human review."
+        )
+    else:
+        result["message"] = "No shared agentic-attack behaviours in the supplied telemetry. This is NOT proof of absence."
+
+    result["recommendations"].append(
+        "Enforce approval at the action layer: for each agent-to-tool integration, "
+        "decide explicitly whether actions are allowed, require human approval, or blocked."
+    )
+    result["recommendations"].append(
+        "Prefer shared-behaviour detection over framework-name matching; it survives renames and forks."
+    )
+    result["recommendations"].append(
+        "DEFENSIVE ONLY: Sentinel does not provide, install or run attack frameworks. "
+        "Validate every rule against your own telemetry before treating it as reliable."
+    )
     return result
 
 
@@ -465,6 +616,9 @@ def check_attack_surface(services: list[dict]) -> dict:
         result["message"] = "No unauthenticated internet-facing services detected. Zero-trust posture maintained."
     
     return result
+
+
+def generate_risk_report(findings: list[dict]) -> str:
     """Generate a human-readable risk report."""
     risk = calculate_risk_score(findings)
 
