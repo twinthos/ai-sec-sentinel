@@ -15,11 +15,16 @@ import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Keep optional imports independent: a missing feedparser must not disable
+# requests (and vice versa). Each is only needed for its own code path.
 try:
     import feedparser
-    import requests
 except ImportError:
     feedparser = None
+
+try:
+    import requests
+except ImportError:
     requests = None
 
 # Import atomic_write from main module (with fallback)
