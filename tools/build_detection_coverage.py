@@ -82,10 +82,9 @@ SENTINEL_TECHNIQUES = [
     {
         "technique": "T1059.004",
         "module": "policy_engine",
-        "check": None,
-        "control": "guardian_policy.json",
+        "check": "shell_exec_is_blocked",
         "confidence": "direct",
-        "rationale": "The shipped policy blocks the shell_exec tool outright; enforcement is a control, not a detection.",
+        "rationale": "Deny-by-default tool policy: shell_exec has no allow rule, so evaluate() returns BLOCK before execution. This is an enforcement control, not a detection.",
     },
     {
         "technique": "T1071.001",

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated_by": "tools/build_detection_coverage.py",
-  "generated_at": "2026-11-25T19:08:06Z",
+  "generated_at": "2026-11-25T19:10:35Z",
   "scope_note": "Reference index only. Sentinel does not execute Sigma rules and does not claim detection coverage for these techniques. 'direct' means a Sentinel check inspects the behaviour; 'partial' means it inspects an adjacent signal.",
   "provenance": {
     "attack": {
@@ -149,10 +149,10 @@
       "attack_url": "https://attack.mitre.org/techniques/T1059/004",
       "sentinel": {
         "module": "policy_engine",
-        "check": null,
-        "control": "guardian_policy.json",
+        "check": "shell_exec_is_blocked",
+        "control": null,
         "confidence": "direct",
-        "rationale": "The shipped policy blocks the shell_exec tool outright; enforcement is a control, not a detection."
+        "rationale": "Deny-by-default tool policy: shell_exec has no allow rule, so evaluate() returns BLOCK before execution. This is an enforcement control, not a detection."
       },
       "sigma_rule_count": 16,
       "sigma_samples": [

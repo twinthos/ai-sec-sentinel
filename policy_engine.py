@@ -309,6 +309,18 @@ class PolicyEngine:
         return True, "Precheck passed; network enforcement still required"
 
 
+def shell_exec_is_blocked() -> bool:
+    """Capability probe for the deny-by-default tool policy.
+
+    A fresh engine has no allow rule for ``shell_exec``, so ``evaluate`` must
+    return BLOCK with rule_id ``default-deny``. Used by the ATT&CK coverage
+    index as the local basis for T1059.004 (Unix Shell). This proves the
+    default, not a deployed operator policy.
+    """
+    decision = PolicyEngine().evaluate("coverage-probe", "shell_exec", {})
+    return decision["decision"] == Decision.BLOCK
+
+
 def run_policy_tests():
     print("=== Policy Engine Tests ===")
     

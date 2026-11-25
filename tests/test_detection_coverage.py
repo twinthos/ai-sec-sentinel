@@ -60,6 +60,33 @@ class TestShippedIndex(unittest.TestCase):
             if control:
                 self.assertTrue((REPO_ROOT / control).is_file(), f"{control} missing for {entry['technique']}")
 
+    def test_control_artefacts_are_tracked_by_git(self):
+        """A locally present but gitignored policy file must not back the index.
+
+        This exact mistake reached CI once: guardian_policy.json exists in a
+        working checkout, is listed in .gitignore, and is absent from a clean
+        clone, so the index validated locally and failed in CI.
+        """
+        controls = [e["sentinel"]["control"] for e in self.index["techniques"] if e["sentinel"].get("control")]
+        if not controls:
+            self.skipTest("index references no local control artefacts")
+        for control in controls:
+            tracked = subprocess.run(
+                ["git", "ls-files", "--error-unmatch", control],
+                cwd=str(REPO_ROOT), capture_output=True, text=True,
+            )
+            self.assertEqual(tracked.returncode, 0,
+                             f"{control} is referenced by the index but not tracked in git")
+
+    def test_unix_shell_entry_is_backed_by_a_passing_control_probe(self):
+        entry = dc.for_technique(self.index, "T1059.004")
+        self.assertIsNotNone(entry)
+        sentinel = entry["sentinel"]
+        self.assertEqual((sentinel["module"], sentinel["check"]), ("policy_engine", "shell_exec_is_blocked"))
+        module = __import__(sentinel["module"])
+        self.assertTrue(getattr(module, sentinel["check"])(),
+                        "the deny-by-default shell probe no longer returns blocked")
+
     def test_every_entry_has_a_local_basis(self):
         for entry in self.index["techniques"]:
             sentinel = entry["sentinel"]
