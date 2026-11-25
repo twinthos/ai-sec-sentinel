@@ -63,6 +63,17 @@ The [minimal read-only MCP server](docs/AGENT-BOUNDARY-DEMO.md) implements an ac
 python3 -m unittest discover -s tests -v
 ```
 
+## New: ATT&CK / Sigma coverage index (reference, not a detection claim)
+
+[`detection/attack-coverage.json`](detection/attack-coverage.json) maps **15** ATT&CK techniques to the Sentinel check or policy artefact that reasons about each behaviour, plus the **709** real Sigma rules upstream that carry the same technique tags. Numbers and rule identities are copied from source at build time — MITRE ATT&CK 20.1 and SigmaHQ `876eb7b8cfbc` — by [`tools/build_detection_coverage.py`](tools/build_detection_coverage.py), which aborts if a technique or a named code path does not resolve.
+
+```sh
+python3 detection_coverage.py --report     # the table
+python3 detection_coverage.py --validate   # contract check; exit 1 on error
+```
+
+`direct` means a check inspects the behaviour; `partial` means it sees an adjacent signal. Sentinel does **not** execute Sigma rules and does **not** claim detection coverage for any technique in the index. Refresh procedure, exit codes and limits: [docs/DETECTION-COVERAGE.md](docs/DETECTION-COVERAGE.md).
+
 ## See the security boundary work — one command
 
 ```sh

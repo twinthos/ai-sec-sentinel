@@ -1,0 +1,982 @@
+{
+  "schema_version": 1,
+  "generated_by": "tools/build_detection_coverage.py",
+  "generated_at": "2026-11-25T19:08:06Z",
+  "scope_note": "Reference index only. Sentinel does not execute Sigma rules and does not claim detection coverage for these techniques. 'direct' means a Sentinel check inspects the behaviour; 'partial' means it inspects an adjacent signal.",
+  "provenance": {
+    "attack": {
+      "name": "Enterprise ATT&CK",
+      "version": "20.1",
+      "modified": "2026-11-05T15:11:27.678Z",
+      "source": "https://github.com/mitre-attack/attack-stix-data",
+      "techniques_in_bundle": 706
+    },
+    "sigma": {
+      "repository": "https://github.com/SigmaHQ/sigma",
+      "licence": "Detection Rule License (DRL) 1.1",
+      "licence_url": "https://github.com/SigmaHQ/Detection-Rule-License",
+      "commit": "876eb7b8cfbc",
+      "committed_at": "2026-11-25T15:34:00Z",
+      "rule_files_scanned": 3164,
+      "rules_with_attack_tags": 2812,
+      "rules_index_sha256_prefix": "743582f045301ae6",
+      "techniques_tagged": 390
+    }
+  },
+  "counts": {
+    "techniques_mapped": 15,
+    "checks_referenced": 5,
+    "sigma_rules_referenced": 709,
+    "direct": 7,
+    "partial": 8
+  },
+  "techniques": [
+    {
+      "technique": "T1041",
+      "name": "Exfiltration Over C2 Channel",
+      "tactics": [
+        "exfiltration"
+      ],
+      "subtechnique_of": null,
+      "attack_url": "https://attack.mitre.org/techniques/T1041",
+      "sentinel": {
+        "module": "risk_compliance",
+        "check": "check_agentic_attack_patterns",
+        "control": null,
+        "confidence": "partial",
+        "rationale": "Outbound callbacks to recent inbound probers are flagged; channel content is not inspected."
+      },
+      "sigma_rule_count": 2,
+      "sigma_samples": [
+        {
+          "id": "b4e6b016-a2ac-4759-ad85-8000b300d61e",
+          "title": "OpenCanary - TFTP Request",
+          "level": "high",
+          "path": "rules/application/opencanary/opencanary_tftp_request.yml",
+          "logsource": {
+            "product": "opencanary",
+            "category": "application"
+          }
+        },
+        {
+          "id": "07837ab9-60e1-481f-a74d-c31fb496a94c",
+          "title": "Network Communication Initiated To Portmap.IO Domain",
+          "level": "medium",
+          "path": "rules/windows/network_connection/net_connection_win_domain_portmap.yml",
+          "logsource": {
+            "product": "windows",
+            "category": "network_connection"
+          }
+        }
+      ]
+    },
+    {
+      "technique": "T1059",
+      "name": "Command and Scripting Interpreter",
+      "tactics": [
+        "execution"
+      ],
+      "subtechnique_of": null,
+      "attack_url": "https://attack.mitre.org/techniques/T1059",
+      "sentinel": {
+        "module": "risk_compliance",
+        "check": "check_agentic_attack_patterns",
+        "control": null,
+        "confidence": "partial",
+        "rationale": "Detects auto-approved agent CLIs starting attack tools; it observes the approval bypass, not the interpreter itself."
+      },
+      "sigma_rule_count": 337,
+      "sigma_samples": [
+        {
+          "id": "83dcd9f6-9ca8-4af7-a16e-a1c7a6b51871",
+          "title": "Linux Reverse Shell Indicator",
+          "level": "critical",
+          "path": "rules/linux/network_connection/net_connection_lnx_back_connect_shell_dev.yml",
+          "logsource": {
+            "product": "linux",
+            "category": "network_connection"
+          }
+        },
+        {
+          "id": "8d31a8ce-46b5-4dd6-bdc3-680931f1db86",
+          "title": "Bad Opsec Powershell Code Artifacts",
+          "level": "critical",
+          "path": "rules/windows/powershell/powershell_module/posh_pm_bad_opsec_artifacts.yml",
+          "logsource": {
+            "product": "windows",
+            "category": "ps_module"
+          }
+        },
+        {
+          "id": "3ceb2083-a27f-449a-be33-14ec1b7cc973",
+          "title": "Silence.EDA Detection",
+          "level": "critical",
+          "path": "rules/windows/powershell/powershell_script/posh_ps_apt_silence_eda.yml",
+          "logsource": {
+            "product": "windows",
+            "category": "ps_script"
+          }
+        },
+        {
+          "id": "42333b2c-b425-441c-b70e-99404a17170f",
+          "title": "HackTool - Sliver C2 Implant Activity Pattern",
+          "level": "critical",
+          "path": "rules/windows/process_creation/proc_creation_win_hktl_sliver_c2_execution_pattern.yml",
+          "logsource": {
+            "product": "windows",
+            "category": "process_creation"
+          }
+        },
+        {
+          "id": "1ab3c5ed-5baf-417b-bb6b-78ca33f6c3df",
+          "title": "AWS EC2 Startup Shell Script Change",
+          "level": "high",
+          "path": "rules/cloud/aws/cloudtrail/aws_ec2_startup_script_change.yml",
+          "logsource": {
+            "product": "aws",
+            "service": "cloudtrail"
+          }
+        }
+      ]
+    },
+    {
+      "technique": "T1059.004",
+      "name": "Unix Shell",
+      "tactics": [
+        "execution"
+      ],
+      "subtechnique_of": "T1059",
+      "attack_url": "https://attack.mitre.org/techniques/T1059/004",
+      "sentinel": {
+        "module": "policy_engine",
+        "check": null,
+        "control": "guardian_policy.json",
+        "confidence": "direct",
+        "rationale": "The shipped policy blocks the shell_exec tool outright; enforcement is a control, not a detection."
+      },
+      "sigma_rule_count": 16,
+      "sigma_samples": [
+        {
+          "id": "83dcd9f6-9ca8-4af7-a16e-a1c7a6b51871",
+          "title": "Linux Reverse Shell Indicator",
+          "level": "critical",
+          "path": "rules/linux/network_connection/net_connection_lnx_back_connect_shell_dev.yml",
+          "logsource": {
+            "product": "linux",
+            "category": "network_connection"
+          }
+        },
+        {
+          "id": "1ab3c5ed-5baf-417b-bb6b-78ca33f6c3df",
+          "title": "AWS EC2 Startup Shell Script Change",
+          "level": "high",
+          "path": "rules/cloud/aws/cloudtrail/aws_ec2_startup_script_change.yml",
+          "logsource": {
+            "product": "aws",
+            "service": "cloudtrail"
+          }
+        },
+        {
+          "id": "41e5c73d-9983-4b69-bd03-e13b67e9623c",
+          "title": "Equation Group Indicators",
+          "level": "high",
+          "path": "rules/linux/builtin/lnx_apt_equationgroup_lnx.yml",
+          "logsource": {
+            "product": "linux"
+          }
+        },
+        {
+          "id": "2aa1440c-9ae9-4d92-84a7-a9e5f5e31695",
+          "title": "Suspicious Activity in Shell Commands",
+          "level": "high",
+          "path": "rules/linux/builtin/lnx_shell_susp_commands.yml",
+          "logsource": {
+            "product": "linux"
+          }
+        },
+        {
+          "id": "738d9bcf-6999-4fdb-b4ac-3033037db8ab",
+          "title": "Suspicious Reverse Shell Command Line",
+          "level": "high",
+          "path": "rules/linux/builtin/lnx_shell_susp_rev_shells.yml",
+          "logsource": {
+            "product": "linux"
+          }
+        }
+      ]
+    },
+    {
+      "technique": "T1071.001",
+      "name": "Web Protocols",
+      "tactics": [
+        "command-and-control"
+      ],
+      "subtechnique_of": "T1071",
+      "attack_url": "https://attack.mitre.org/techniques/T1071/001",
+      "sentinel": {
+        "module": "risk_compliance",
+        "check": "check_agentic_attack_patterns",
+        "control": null,
+        "confidence": "partial",
+        "rationale": "Flags production servers calling unexpected model API or gateway endpoints, a web-protocol egress anomaly."
+      },
+      "sigma_rule_count": 31,
+      "sigma_samples": [
+        {
+          "id": "304810ed-8853-437f-9e36-c4975c3dfd7e",
+          "title": "HackTool - BabyShark Agent Default URL Pattern",
+          "level": "critical",
+          "path": "rules/web/proxy_generic/proxy_hktl_baby_shark_default_agent_url.yml",
+          "logsource": {
+            "category": "proxy"
+          }
+        },
+        {
+          "id": "2b1ee7e4-89b6-4739-b7bb-b811b6607e5e",
+          "title": "PwnDrp Access",
+          "level": "critical",
+          "path": "rules/web/proxy_generic/proxy_pwndrop.yml",
+          "logsource": {
+            "category": "proxy"
+          }
+        },
+        {
+          "id": "3eaf6218-3bed-4d8a-8707-274096f12a18",
+          "title": "Wannacry Killswitch Domain",
+          "level": "high",
+          "path": "rules/network/dns/net_dns_wannacry_killswitch_domain.yml",
+          "logsource": {
+            "category": "dns"
+          }
+        },
+        {
+          "id": "e09aed7a-09e0-4c9a-90dd-f0d52507347e",
+          "title": "Windows WebDAV User Agent",
+          "level": "high",
+          "path": "rules/web/proxy_generic/proxy_downloadcradle_webdav.yml",
+          "logsource": {
+            "category": "proxy"
+          }
+        },
+        {
+          "id": "f3f21ce1-cdef-4bfc-8328-ed2e826f5fac",
+          "title": "HackTool - CobaltStrike Malleable Profile Patterns - Proxy",
+          "level": "high",
+          "path": "rules/web/proxy_generic/proxy_hktl_cobalt_strike_malleable_c2_requests.yml",
+          "logsource": {
+            "category": "proxy"
+          }
+        }
+      ]
+    },
+    {
+      "technique": "T1078.004",
+      "name": "Cloud Accounts",
+      "tactics": [
+        "stealth",
+        "persistence",
+        "privilege-escalation",
+        "initial-access"
+      ],
+      "subtechnique_of": "T1078",
+      "attack_url": "https://attack.mitre.org/techniques/T1078/004",
+      "sentinel": {
+        "module": "risk_compliance",
+        "check": "check_agentic_attack_patterns",
+        "control": null,
+        "confidence": "direct",
+        "rationale": "machine_speed_credential_use covers cloud identities used at machine speed and off-instance role keys."
+      },
+      "sigma_rule_count": 37,
+      "sigma_samples": [
+        {
+          "id": "db014773-b1d3-46bd-ba26-133337c0ffee",
+          "title": "AWS IAM S3Browser LoginProfile Creation",
+          "level": "high",
+          "path": "rules/cloud/aws/cloudtrail/aws_iam_s3browser_loginprofile_creation.yml",
+          "logsource": {
+            "product": "aws",
+            "service": "cloudtrail"
+          }
+        },
+        {
+          "id": "db014773-7375-4f4e-b83b-133337c0ffee",
+          "title": "AWS IAM S3Browser Templated S3 Bucket Policy Creation",
+          "level": "high",
+          "path": "rules/cloud/aws/cloudtrail/aws_iam_s3browser_templated_s3_bucket_policy_creation.yml",
+          "logsource": {
+            "product": "aws",
+            "service": "cloudtrail"
+          }
+        },
+        {
+          "id": "db014773-d9d9-4792-91e5-133337c0ffee",
+          "title": "AWS IAM S3Browser User or AccessKey Creation",
+          "level": "high",
+          "path": "rules/cloud/aws/cloudtrail/aws_iam_s3browser_user_or_accesskey_creation.yml",
+          "logsource": {
+            "product": "aws",
+            "service": "cloudtrail"
+          }
+        },
+        {
+          "id": "09438caa-07b1-4870-8405-1dbafe3dad95",
+          "title": "Azure Subscription Permission Elevation Via ActivityLogs",
+          "level": "high",
+          "path": "rules/cloud/azure/activity_logs/azure_subscription_permissions_elevation_via_activitylogs.yml",
+          "logsource": {
+            "product": "azure",
+            "service": "activitylogs"
+          }
+        },
+        {
+          "id": "11c767ae-500b-423b-bae3-b234450736ed",
+          "title": "Users Added to Global or Device Admin Roles",
+          "level": "high",
+          "path": "rules/cloud/azure/audit_logs/azure_ad_users_added_to_device_admin_roles.yml",
+          "logsource": {
+            "product": "azure",
+            "service": "auditlogs"
+          }
+        }
+      ]
+    },
+    {
+      "technique": "T1090",
+      "name": "Proxy",
+      "tactics": [
+        "command-and-control"
+      ],
+      "subtechnique_of": null,
+      "attack_url": "https://attack.mitre.org/techniques/T1090",
+      "sentinel": {
+        "module": "risk_compliance",
+        "check": "check_agentic_attack_patterns",
+        "control": null,
+        "confidence": "direct",
+        "rationale": "Rotating-proxy probing is one of the shared agentic behaviours Sentinel classifies."
+      },
+      "sigma_rule_count": 31,
+      "sigma_samples": [
+        {
+          "id": "5498fc09-adc6-4804-b9d9-5cca1f0b8760",
+          "title": "OpenCanary - HTTPPROXY Login Attempt",
+          "level": "high",
+          "path": "rules/application/opencanary/opencanary_httpproxy_login_attempt.yml",
+          "logsource": {
+            "product": "opencanary",
+            "category": "application"
+          }
+        },
+        {
+          "id": "a3f55ebd-0c01-4ed6-adc0-8fb76d8cd3cd",
+          "title": "Malicious IP Address Sign-In Failure Rate",
+          "level": "high",
+          "path": "rules/cloud/azure/identity_protection/azure_identity_protection_malicious_ip_address.yml",
+          "logsource": {
+            "product": "azure",
+            "service": "riskdetection"
+          }
+        },
+        {
+          "id": "36440e1c-5c22-467a-889b-593e66498472",
+          "title": "Malicious IP Address Sign-In Suspicious",
+          "level": "high",
+          "path": "rules/cloud/azure/identity_protection/azure_identity_protection_malicious_ip_address_suspicious.yml",
+          "logsource": {
+            "product": "azure",
+            "service": "riskdetection"
+          }
+        },
+        {
+          "id": "821b4dc3-1295-41e7-b157-39ab212dd6bd",
+          "title": "Sign-In From Malware Infected IP",
+          "level": "high",
+          "path": "rules/cloud/azure/identity_protection/azure_identity_protection_malware_linked_ip.yml",
+          "logsource": {
+            "product": "azure",
+            "service": "riskdetection"
+          }
+        },
+        {
+          "id": "c4568f5d-131f-4e78-83d4-45b2da0ec4f1",
+          "title": "Communication To LocaltoNet Tunneling Service Initiated - Linux",
+          "level": "high",
+          "path": "rules/linux/network_connection/net_connection_lnx_domain_localtonet_tunnel.yml",
+          "logsource": {
+            "product": "linux",
+            "category": "network_connection"
+          }
+        }
+      ]
+    },
+    {
+      "technique": "T1098",
+      "name": "Account Manipulation",
+      "tactics": [
+        "persistence",
+        "privilege-escalation"
+      ],
+      "subtechnique_of": null,
+      "attack_url": "https://attack.mitre.org/techniques/T1098",
+      "sentinel": {
+        "module": "defensive_event_triage",
+        "check": "analyse",
+        "control": null,
+        "confidence": "partial",
+        "rationale": "High-risk change events are surfaced for verification against approved administrators and change records."
+      },
+      "sigma_rule_count": 42,
+      "sigma_samples": [
+        {
+          "id": "055fb148-60f8-462d-ad16-26926ce050f1",
+          "title": "AWS User Login Profile Was Modified",
+          "level": "high",
+          "path": "rules/cloud/aws/cloudtrail/aws_update_login_profile.yml",
+          "logsource": {
+            "product": "aws",
+            "service": "cloudtrail"
+          }
+        },
+        {
+          "id": "cbb67ecc-fb70-4467-9350-c910bdf7c628",
+          "title": "Added Credentials to Existing Application",
+          "level": "high",
+          "path": "rules/cloud/azure/audit_logs/azure_app_credential_added.yml",
+          "logsource": {
+            "product": "azure",
+            "service": "auditlogs"
+          }
+        },
+        {
+          "id": "5aecf3d5-f8a0-48e7-99be-3a759df7358f",
+          "title": "App Granted Privileged Delegated Or App Permissions",
+          "level": "high",
+          "path": "rules/cloud/azure/audit_logs/azure_app_privileged_permissions.yml",
+          "logsource": {
+            "product": "azure",
+            "service": "auditlogs"
+          }
+        },
+        {
+          "id": "a4b25073-8947-489c-a8dd-93b41c23f26d",
+          "title": "Windows LAPS Credential Dump From Entra ID",
+          "level": "high",
+          "path": "rules/cloud/azure/audit_logs/azure_auditlogs_laps_credential_dumping.yml",
+          "logsource": {
+            "product": "azure",
+            "service": "auditlogs"
+          }
+        },
+        {
+          "id": "102e11e3-2db5-4c9e-bc26-357d42585d21",
+          "title": "Bulk Deletion Changes To Privileged Account Permissions",
+          "level": "high",
+          "path": "rules/cloud/azure/audit_logs/azure_priviledged_role_assignment_bulk_change.yml",
+          "logsource": {
+            "product": "azure",
+            "service": "auditlogs"
+          }
+        }
+      ]
+    },
+    {
+      "technique": "T1105",
+      "name": "Ingress Tool Transfer",
+      "tactics": [
+        "command-and-control"
+      ],
+      "subtechnique_of": null,
+      "attack_url": "https://attack.mitre.org/techniques/T1105",
+      "sentinel": {
+        "module": "risk_compliance",
+        "check": "check_agentic_attack_patterns",
+        "control": null,
+        "confidence": "partial",
+        "rationale": "Callback-to-prober and worker-port traffic is a transfer path signal, not payload inspection."
+      },
+      "sigma_rule_count": 70,
+      "sigma_samples": [
+        {
+          "id": "54f0434b-726f-48a1-b2aa-067df14516e4",
+          "title": "Password Protected ZIP File Opened (Suspicious Filenames)",
+          "level": "high",
+          "path": "rules/windows/builtin/security/win_security_susp_opened_encrypted_zip_filename.yml",
+          "logsource": {
+            "product": "windows",
+            "service": "security"
+          }
+        },
+        {
+          "id": "e890acee-d488-420e-8f20-d9b19b3c3d43",
+          "title": "Suspicious File Created by ArcSOC.exe",
+          "level": "high",
+          "path": "rules/windows/file/file_event/file_event_win_arcsoc_susp_file_created.yml",
+          "logsource": {
+            "product": "windows",
+            "category": "file_event"
+          }
+        },
+        {
+          "id": "fc4f4817-0c53-4683-a4ee-b17a64bc1039",
+          "title": "Suspicious Desktopimgdownldr Target File",
+          "level": "high",
+          "path": "rules/windows/file/file_event/file_event_win_susp_desktopimgdownldr_file.yml",
+          "logsource": {
+            "product": "windows",
+            "category": "file_event"
+          }
+        },
+        {
+          "id": "1cf465a1-2609-4c15-9b66-c32dbe4bfd67",
+          "title": "Legitimate Application Writing Files In Uncommon Location",
+          "level": "high",
+          "path": "rules/windows/file/file_event/file_event_win_susp_legitimate_app_dropping_in_uncommon_location.yml",
+          "logsource": {
+            "product": "windows",
+            "category": "file_event"
+          }
+        },
+        {
+          "id": "0dba975d-a193-4ed1-a067-424df57570d1",
+          "title": "Uncommon Network Connection Initiated By Certutil.EXE",
+          "level": "high",
+          "path": "rules/windows/network_connection/net_connection_win_certutil_initiated_connection.yml",
+          "logsource": {
+            "product": "windows",
+            "category": "network_connection"
+          }
+        }
+      ]
+    },
+    {
+      "technique": "T1110",
+      "name": "Brute Force",
+      "tactics": [
+        "credential-access"
+      ],
+      "subtechnique_of": null,
+      "attack_url": "https://attack.mitre.org/techniques/T1110",
+      "sentinel": {
+        "module": "defensive_event_triage",
+        "check": "analyse",
+        "control": null,
+        "confidence": "direct",
+        "rationale": "Cross-tenant sign-in bursts are counted as aggregate failure clusters without emitting source identifiers."
+      },
+      "sigma_rule_count": 27,
+      "sigma_samples": [
+        {
+          "id": "28ecba0a-c743-4690-ad29-9a8f6f25a6f9",
+          "title": "Password Spray Activity",
+          "level": "high",
+          "path": "rules/cloud/azure/identity_protection/azure_identity_protection_password_spray.yml",
+          "logsource": {
+            "product": "azure",
+            "service": "riskdetection"
+          }
+        },
+        {
+          "id": "53bb4f7f-48a8-4475-ac30-5a82ddfdf6fc",
+          "title": "Potential MFA Bypass Using Legacy Client Authentication",
+          "level": "high",
+          "path": "rules/cloud/azure/signin_logs/azure_ad_suspicious_signin_bypassing_mfa.yml",
+          "logsource": {
+            "product": "azure",
+            "service": "signinlogs"
+          }
+        },
+        {
+          "id": "b4a6d707-9430-4f5f-af68-0337f52d5c42",
+          "title": "Sign-in Failure Due to Conditional Access Requirements Not Met",
+          "level": "high",
+          "path": "rules/cloud/azure/signin_logs/azure_conditional_access_failure.yml",
+          "logsource": {
+            "product": "azure",
+            "service": "signinlogs"
+          }
+        },
+        {
+          "id": "60f6535a-760f-42a9-be3f-c9a0a025906e",
+          "title": "Use of Legacy Authentication Protocols",
+          "level": "high",
+          "path": "rules/cloud/azure/signin_logs/azure_legacy_authentication_protocols.yml",
+          "logsource": {
+            "product": "azure",
+            "service": "signinlogs"
+          }
+        },
+        {
+          "id": "c42a3073-30fb-48ae-8c99-c23ada84b103",
+          "title": "Hack Tool User Agent",
+          "level": "high",
+          "path": "rules/web/proxy_generic/proxy_ua_hacktool.yml",
+          "logsource": {
+            "category": "proxy"
+          }
+        }
+      ]
+    },
+    {
+      "technique": "T1133",
+      "name": "External Remote Services",
+      "tactics": [
+        "persistence",
+        "initial-access"
+      ],
+      "subtechnique_of": null,
+      "attack_url": "https://attack.mitre.org/techniques/T1133",
+      "sentinel": {
+        "module": "risk_compliance",
+        "check": "check_attack_surface",
+        "control": null,
+        "confidence": "partial",
+        "rationale": "Same surface review covers remote-access services left reachable without authentication."
+      },
+      "sigma_rule_count": 19,
+      "sigma_samples": [
+        {
+          "id": "598290cf-5932-45cd-9123-be1e05ab4f2e",
+          "title": "OpenCanary - RDP New Connection Attempt",
+          "level": "high",
+          "path": "rules/application/opencanary/opencanary_rdp_connection_attempt.yml",
+          "logsource": {
+            "product": "opencanary",
+            "category": "application"
+          }
+        },
+        {
+          "id": "ff7139bc-fdb1-4437-92f2-6afefe8884cb",
+          "title": "OpenCanary - SSH Login Attempt",
+          "level": "high",
+          "path": "rules/application/opencanary/opencanary_ssh_login_attempt.yml",
+          "logsource": {
+            "product": "opencanary",
+            "category": "application"
+          }
+        },
+        {
+          "id": "cd55f721-5623-4663-bd9b-5229cab5237d",
+          "title": "OpenCanary - SSH New Connection Attempt",
+          "level": "high",
+          "path": "rules/application/opencanary/opencanary_ssh_new_connection.yml",
+          "logsource": {
+            "product": "opencanary",
+            "category": "application"
+          }
+        },
+        {
+          "id": "512cff7a-683a-43ad-afe0-dd398e872f36",
+          "title": "OpenCanary - Telnet Login Attempt",
+          "level": "high",
+          "path": "rules/application/opencanary/opencanary_telnet_login_attempt.yml",
+          "logsource": {
+            "product": "opencanary",
+            "category": "application"
+          }
+        },
+        {
+          "id": "78d5cab4-557e-454f-9fb9-a222bd0d5edc",
+          "title": "External Remote SMB Logon from Public IP",
+          "level": "high",
+          "path": "rules/windows/builtin/security/account_management/win_security_successful_external_remote_smb_login.yml",
+          "logsource": {
+            "product": "windows",
+            "service": "security"
+          }
+        }
+      ]
+    },
+    {
+      "technique": "T1190",
+      "name": "Exploit Public-Facing Application",
+      "tactics": [
+        "initial-access"
+      ],
+      "subtechnique_of": null,
+      "attack_url": "https://attack.mitre.org/techniques/T1190",
+      "sentinel": {
+        "module": "risk_compliance",
+        "check": "check_attack_surface",
+        "control": null,
+        "confidence": "partial",
+        "rationale": "Flags unauthenticated internet-facing services, the precondition for exploitation, not exploit traffic itself."
+      },
+      "sigma_rule_count": 46,
+      "sigma_samples": [
+        {
+          "id": "bb0e9cec-d4da-46f5-997f-22efc59f3dca",
+          "title": "Potential JNDI Injection Exploitation In JVM Based Application",
+          "level": "high",
+          "path": "rules/application/jvm/java_jndi_injection_exploitation_attempt.yml",
+          "logsource": {
+            "product": "jvm",
+            "category": "application"
+          }
+        },
+        {
+          "id": "e032f5bc-4563-4096-ae3b-064bab588685",
+          "title": "Potential Local File Read Vulnerability In JVM Based Application",
+          "level": "high",
+          "path": "rules/application/jvm/java_local_file_read.yml",
+          "logsource": {
+            "product": "jvm",
+            "category": "application"
+          }
+        },
+        {
+          "id": "4d0af518-828e-4a04-a751-a7d03f3046ad",
+          "title": "Potential OGNL Injection Exploitation In JVM Based Application",
+          "level": "high",
+          "path": "rules/application/jvm/java_ognl_injection_exploitation_attempt.yml",
+          "logsource": {
+            "product": "jvm",
+            "category": "application"
+          }
+        },
+        {
+          "id": "d65f37da-a26a-48f8-8159-3dde96680ad2",
+          "title": "Process Execution Error In JVM Based Application",
+          "level": "high",
+          "path": "rules/application/jvm/java_rce_exploitation_attempt.yml",
+          "logsource": {
+            "product": "jvm",
+            "category": "application"
+          }
+        },
+        {
+          "id": "c4e06896-e27c-4583-95ac-91ce2279345d",
+          "title": "Potential XXE Exploitation Attempt In JVM Based Application",
+          "level": "high",
+          "path": "rules/application/jvm/java_xxe_exploitation_attempt.yml",
+          "logsource": {
+            "product": "jvm",
+            "category": "application"
+          }
+        }
+      ]
+    },
+    {
+      "technique": "T1552.001",
+      "name": "Credentials In Files",
+      "tactics": [
+        "credential-access"
+      ],
+      "subtechnique_of": "T1552",
+      "attack_url": "https://attack.mitre.org/techniques/T1552/001",
+      "sentinel": {
+        "module": "risk_compliance",
+        "check": "check_agentic_attack_patterns",
+        "control": null,
+        "confidence": "direct",
+        "rationale": "Bulk reads of configuration, .env and backup files are classified as config_or_backup_theft."
+      },
+      "sigma_rule_count": 20,
+      "sigma_samples": [
+        {
+          "id": "df3fcaea-2715-4214-99c5-0056ea59eb35",
+          "title": "Credentials In Files - Linux",
+          "level": "high",
+          "path": "rules/linux/auditd/execve/lnx_auditd_find_cred_in_files.yml",
+          "logsource": {
+            "product": "linux",
+            "service": "auditd"
+          }
+        },
+        {
+          "id": "fa4aaed5-4fe0-498d-bbc0-08e3346387ba",
+          "title": "Copy Passwd Or Shadow From TMP Path",
+          "level": "high",
+          "path": "rules/linux/process_creation/proc_creation_lnx_cp_passwd_or_shadow_tmp.yml",
+          "logsource": {
+            "product": "linux",
+            "category": "process_creation"
+          }
+        },
+        {
+          "id": "0cf7a157-8879-41a2-8f55-388dd23746b7",
+          "title": "Linux Recon Indicators",
+          "level": "high",
+          "path": "rules/linux/process_creation/proc_creation_lnx_susp_recon_indicators.yml",
+          "logsource": {
+            "product": "linux",
+            "category": "process_creation"
+          }
+        },
+        {
+          "id": "53b1b378-9b06-4992-b972-dde6e423d2b4",
+          "title": "Credentials In Files",
+          "level": "high",
+          "path": "rules/macos/process_creation/proc_creation_macos_find_cred_in_files.yml",
+          "logsource": {
+            "product": "macos",
+            "category": "process_creation"
+          }
+        },
+        {
+          "id": "6ea858a8-ba71-4a12-b2cc-5d83312404c7",
+          "title": "HackTool - Typical HiveNightmare SAM File Export",
+          "level": "high",
+          "path": "rules/windows/file/file_event/file_event_win_hktl_hivenightmare_file_exports.yml",
+          "logsource": {
+            "product": "windows",
+            "category": "file_event"
+          }
+        }
+      ]
+    },
+    {
+      "technique": "T1566",
+      "name": "Phishing",
+      "tactics": [
+        "initial-access"
+      ],
+      "subtechnique_of": null,
+      "attack_url": "https://attack.mitre.org/techniques/T1566",
+      "sentinel": {
+        "module": "risk_compliance",
+        "check": "check_email_security",
+        "control": null,
+        "confidence": "partial",
+        "rationale": "SPF/DMARC configuration review addresses spoofing of the sender domain, one phishing precondition."
+      },
+      "sigma_rule_count": 26,
+      "sigma_samples": [
+        {
+          "id": "38e7f511-3f74-41d4-836e-f57dfa18eead",
+          "title": "Potential Malicious Usage of CloudTrail System Manager",
+          "level": "high",
+          "path": "rules/cloud/aws/cloudtrail/aws_cloudtrail_ssm_malicious_usage.yml",
+          "logsource": {
+            "product": "aws",
+            "service": "cloudtrail"
+          }
+        },
+        {
+          "id": "ee39a9f7-5a79-4b0a-9815-d36b3cf28d3e",
+          "title": "Okta FastPass Phishing Detection",
+          "level": "high",
+          "path": "rules/identity/okta/okta_fastpass_phishing_detection.yml",
+          "logsource": {
+            "product": "okta",
+            "service": "okta"
+          }
+        },
+        {
+          "id": "1ae64f96-72b6-48b3-ad3d-e71dff6c6398",
+          "title": "Suspicious External WebDAV Execution",
+          "level": "high",
+          "path": "rules/web/proxy_generic/proxy_webdav_external_execution.yml",
+          "logsource": {
+            "category": "proxy"
+          }
+        },
+        {
+          "id": "571498c8-908e-40b4-910b-d2369159a3da",
+          "title": "Password Protected ZIP File Opened (Email Attachment)",
+          "level": "high",
+          "path": "rules/windows/builtin/security/win_security_susp_opened_encrypted_zip_outlook.yml",
+          "logsource": {
+            "product": "windows",
+            "service": "security"
+          }
+        },
+        {
+          "id": "2f9356ae-bf43-41b8-b858-4496d83b2acb",
+          "title": "ISO File Created Within Temp Folders",
+          "level": "high",
+          "path": "rules/windows/file/file_event/file_event_win_iso_file_mount.yml",
+          "logsource": {
+            "product": "windows",
+            "category": "file_event"
+          }
+        }
+      ]
+    },
+    {
+      "technique": "T1595",
+      "name": "Active Scanning",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "subtechnique_of": null,
+      "attack_url": "https://attack.mitre.org/techniques/T1595",
+      "sentinel": {
+        "module": "risk_compliance",
+        "check": "check_agentic_attack_patterns",
+        "control": null,
+        "confidence": "direct",
+        "rationale": "Classifies caller-supplied telemetry for rotating-proxy probing and page-reader scanning beside attack traffic."
+      },
+      "sigma_rule_count": 4,
+      "sigma_samples": [
+        {
+          "id": "aff715fa-4dd5-497a-8db3-910bea555566",
+          "title": "DNS Query to External Service Interaction Domains",
+          "level": "high",
+          "path": "rules/network/dns/net_dns_external_service_interaction_domains.yml",
+          "logsource": {
+            "category": "dns"
+          }
+        },
+        {
+          "id": "b37998de-a70b-4f33-b219-ec36bf433dc0",
+          "title": "PUA - PingCastle Execution From Potentially Suspicious Parent",
+          "level": "high",
+          "path": "rules/windows/process_creation/proc_creation_win_pua_pingcastle_script_parent.yml",
+          "logsource": {
+            "product": "windows",
+            "category": "process_creation"
+          }
+        },
+        {
+          "id": "1712bafe-be05-4a0e-89d4-17a3ed151bf5",
+          "title": "Potential Hello-World Scraper Botnet Activity",
+          "level": "medium",
+          "path": "rules/web/proxy_generic/proxy_hello_world_user_agent.yml",
+          "logsource": {
+            "category": "proxy"
+          }
+        },
+        {
+          "id": "b1cb4ab6-ac31-43f4-adf1-d9d08957419c",
+          "title": "PUA - PingCastle Execution",
+          "level": "medium",
+          "path": "rules/windows/process_creation/proc_creation_win_pua_pingcastle.yml",
+          "logsource": {
+            "product": "windows",
+            "category": "process_creation"
+          }
+        }
+      ]
+    },
+    {
+      "technique": "T1595.002",
+      "name": "Vulnerability Scanning",
+      "tactics": [
+        "reconnaissance"
+      ],
+      "subtechnique_of": "T1595",
+      "attack_url": "https://attack.mitre.org/techniques/T1595/002",
+      "sentinel": {
+        "module": "risk_compliance",
+        "check": "check_agentic_attack_patterns",
+        "control": null,
+        "confidence": "direct",
+        "rationale": "Vulnerability-scanning behaviour surfaces as single-target probing spread across many source addresses."
+      },
+      "sigma_rule_count": 1,
+      "sigma_samples": [
+        {
+          "id": "aff715fa-4dd5-497a-8db3-910bea555566",
+          "title": "DNS Query to External Service Interaction Domains",
+          "level": "high",
+          "path": "rules/network/dns/net_dns_external_service_interaction_domains.yml",
+          "logsource": {
+            "category": "dns"
+          }
+        }
+      ]
+    }
+  ]
+}

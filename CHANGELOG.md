@@ -2,6 +2,31 @@
 
 All notable changes to Twinthos Sentinel are documented here.
 
+## Unreleased — 2026-11-25
+
+### Added
+- **ATT&CK / Sigma coverage index** (`detection/attack-coverage.json`,
+  `detection_coverage.py`, `tools/build_detection_coverage.py`,
+  `docs/DETECTION-COVERAGE.md`): maps 15 ATT&CK techniques to the Sentinel check
+  or policy artefact that reasons about each behaviour, with the 709 upstream
+  Sigma rules that carry the same technique tags.
+- Index is generated offline from MITRE ATT&CK 20.1 and SigmaHQ `876eb7b8cfbc`;
+  technique names, tactics, rule ids and rule paths are copied from source, and
+  the build aborts on a missing technique or an unresolvable code path.
+- `--validate` enforces the index contract (id shape and uniqueness, resolvable
+  checks, existing control artefacts, real rule UUIDs with upstream paths, and
+  counts that match the entries); exit 1 on error, 2 on an unmapped technique.
+- 24 offline tests, including six that corrupt a copy of the index on purpose to
+  prove the validator can fail.
+
+### Limits
+- The index is a reference map, not detection coverage: `direct` means a check
+  inspects the behaviour, `partial` means it sees an adjacent signal.
+- Sentinel does not execute Sigma rules and does not redistribute rule bodies.
+- MITRE ATLAS (AI/agent-specific techniques) is not mapped.
+- CI verifies the committed index against its contract only; it does not
+  re-download Sigma or ATT&CK, so a refresh is a manual maintainer step.
+
 ## Unreleased — 2026-11-03
 
 ### Verified repository improvements
