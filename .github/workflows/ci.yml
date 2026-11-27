@@ -17,10 +17,10 @@ jobs:
       matrix:
         python: ['3.11', '3.13']
     steps:
-      - uses: actions/checkout@v5
+      - uses: 08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - uses: e797f83bcb11b83ae66e0230d6156d7c80228e7c  # v6.0.0
         with:
           python-version: ${{ matrix.python }}
       - name: Install runtime dependencies
@@ -49,7 +49,7 @@ jobs:
           python3 defensive_event_triage.py --input examples/fixtures/synthetic_cloud_events.jsonl > sentinel-triage.json
           python3 -c "import json; d=json.load(open('sentinel-triage.json')); assert len(d['signals']) >= 2 and not d['source_identifiers_included']"
       - name: Publish synthetic evidence artifact
-        uses: actions/upload-artifact@v4
+        uses: 4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1  # v4.6.1
         with:
           name: sentinel-synthetic-evidence-${{ matrix.python }}
           path: |
@@ -70,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - uses: 08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
         with:
           persist-credentials: false
       - name: Validate Compose configuration
